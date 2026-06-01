@@ -1,0 +1,13 @@
+# Generated datasets and media (reproducible via /setup + /generate)
+data/
+
+# Harness runtime state (if introduced later)
+.harness_state/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# IDE
+.idea/
