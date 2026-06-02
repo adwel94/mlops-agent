@@ -1,13 +1,19 @@
-"""Generate a VLA-style dataset from ManiSkill demonstrations.
+"""Generate a VLA-style dataset by replaying an action trajectory (RGB + actions).
+
+This is the shared consumer stage: it takes a raw trajectory produced by EITHER
+action source — `fetch` (downloaded official demos) or `solve` (motion planning
+in WSL) — and replays it to record observations. Both producers emit the same
+format (actions + env_states, obs_mode=none), so this step is identical
+regardless of where the actions came from. Point `traj_path` at the desired
+source; the default is the fetched demo at ~/.maniskill/demos/<task>/.
 
 Two interfaces:
   - Python:  from scripts.generate import run; run(task="PickCube-v1", count=100)
   - CLI:     python scripts/generate.py --task PickCube-v1 --count 100
 
-Mechanism: replays the official Hugging Face demos (downloaded once via
-download_demo) with the requested observation/control mode and writes a new
-HDF5. Forces render_backend='cpu' on Windows so the CUDA-Vulkan interop
-segfault in the default GPU render path is avoided.
+Mechanism: replays the trajectory with the requested observation/control mode and
+writes a new HDF5. Forces render_backend='cpu' on Windows so the CUDA-Vulkan
+interop segfault in the default GPU render path is avoided.
 """
 from __future__ import annotations
 
@@ -94,21 +100,28 @@ def run(
     finally:
         sys.argv = old_argv
 
-    # replay_trajectory writes next to the source demo (external cache).
-    # Move the produced .h5 (+ its .json) into the project's data/ dir so all
-    # generated artifacts stay self-contained.
+    # replay_trajectory names its output after the SOURCE stem (not a fixed
+    # "trajectory"): fetched demo `trajectory.h5` -> `trajectory.<obs>...`,
+    # solved `motionplanning.h5` -> `motionplanning.<obs>...`. The stem thus
+    # records which producer the actions came from.
     final_ctrl = _resolve_control_mode(src, target_control_mode)
-    produced = src.parent / f"trajectory.{obs_mode}.{final_ctrl}.{sim_backend}.h5"
+    produced = src.parent / f"{src.stem}.{obs_mode}.{final_ctrl}.{sim_backend}.h5"
     if not save_traj:
         return produced  # nothing was written to disk
 
+    # Move the produced .h5 (+ its .json) into the project's data/ dir so all
+    # generated artifacts stay self-contained. If the source already lives there
+    # (e.g. a solve output), the file is already in place — skip the no-op move.
     dest_dir = DATASETS_ROOT / task
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / produced.name
-    shutil.move(str(produced), str(dest))
-    produced_json = produced.with_suffix(".json")
-    if produced_json.exists():
-        shutil.move(str(produced_json), str(dest.with_suffix(".json")))
+    if produced.resolve() != dest.resolve():
+        shutil.move(str(produced), str(dest))
+        produced_json = produced.with_suffix(".json")
+        if produced_json.exists():
+            if dest.with_suffix(".json").exists():
+                dest.with_suffix(".json").unlink()
+            shutil.move(str(produced_json), str(dest.with_suffix(".json")))
     return dest
 
 

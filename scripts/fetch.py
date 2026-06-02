@@ -1,11 +1,17 @@
-"""Download ManiSkill demonstration datasets for a given task.
+"""Fetch (download) official ManiSkill demonstration datasets for a task.
+
+One of two action-source ("producer") skills. `fetch` pulls ready-made official
+demos from Hugging Face — the fast/baseline path. The other producer, `solve`,
+generates actions from scratch via motion planning in WSL. Both yield the same
+raw trajectory format (actions + env_states, no images), which `generate` then
+replays to add RGB observations.
 
 Idempotent: if demos already exist for the task, skips re-download unless
 --force is passed.
 
 Two interfaces:
-  - Python:  from scripts.setup import run; run(task="PickCube-v1")
-  - CLI:     python scripts/setup.py --task PickCube-v1
+  - Python:  from scripts.fetch import run; run(task="PickCube-v1")
+  - CLI:     python scripts/fetch.py --task PickCube-v1
 """
 from __future__ import annotations
 
@@ -34,10 +40,10 @@ def run(task: str = "PickCube-v1", force: bool = False) -> Path:
     target = task_demo_dir(task)
 
     if is_downloaded(task) and not force:
-        print(f"[setup] {task}: already present -> {target}")
+        print(f"[fetch] {task}: already present -> {target}")
         return target
 
-    print(f"[setup] {task}: downloading demos via mani_skill.utils.download_demo ...")
+    print(f"[fetch] {task}: downloading demos via mani_skill.utils.download_demo ...")
     subprocess.run(
         [sys.executable, "-m", "mani_skill.utils.download_demo", task],
         check=True,
