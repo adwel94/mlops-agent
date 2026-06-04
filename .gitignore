@@ -1,4 +1,4 @@
-# Generated datasets and media (reproducible via /setup + /generate)
+# Generated datasets and media (reproducible via /fetch_sample_h5|/task_to_h5 + /h5_add_images)
 data/
 
 # Harness runtime state (if introduced later)
