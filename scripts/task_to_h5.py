@@ -1,23 +1,24 @@
-"""Generate action trajectories from scratch via ManiSkill motion planning (WSL).
+"""Generate an action trajectory from a task via ManiSkill motion planning (WSL).
 
-`solve` is the action-source ("producer") that creates demos itself, as opposed
-to `fetch` which downloads ready-made ones. Motion planning needs `mplib`, which
-only ships Linux binaries, so the actual solving runs inside WSL; this module is
-the Windows-side orchestrator that drives it and lands the output inside the
-project's `data/` (self-contained).
+`task_to_h5` is the producer that creates demos itself, as opposed to
+`fetch_sample_h5` which downloads ready-made ones. Motion planning needs `mplib`,
+which only ships Linux binaries, so the actual solving runs inside WSL; this
+module is the Windows-side orchestrator that drives it and lands the output
+inside the project's `data/` (self-contained).
 
 Pipeline position:
-    solve (here) ->  trajectory (actions + env_states, NO images)
-                 ->  generate (replay -> add RGB)  ->  dataset
+    task_to_h5 (here) ->  trajectory (actions + env_states, NO images)
+                      ->  h5_add_images (replay -> add RGB)  ->  dataset
 
-Mechanism: invoke the WSL conda env's Python on `_wsl_solve_wrapper.py` (reached
-over /mnt/c) which runs ManiSkill's panda motion-planning solver headless on the
-software (llvmpipe) Vulkan renderer. Output (.h5 + .json) is written straight to
-the shared C: drive, then moved into data/datasets/<task>/.
+Mechanism: invoke the WSL conda env's Python on a wrapper (reached over /mnt/c)
+that runs the panda motion-planning solver headless on the software (llvmpipe)
+Vulkan renderer. Built-in tasks use ManiSkill's run.py; this harness's custom
+tasks use a seed-loop generator over scripts.custom_solutions. Output (.h5 +
+.json) is written to the shared C: drive, then moved into data/datasets/<task>/.
 
 Two interfaces:
-  - Python:  from scripts.solve import run; run(task="PickCube-v1", count=100)
-  - CLI:     python scripts/solve.py --task PickCube-v1 --count 100
+  - Python:  from scripts.task_to_h5 import run; run(task="PickCube-v1", count=100)
+  - CLI:     python scripts/task_to_h5.py --task PickCube-v1 --count 100
 """
 from __future__ import annotations
 
@@ -34,13 +35,19 @@ WSL_VK_ICD = "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASETS_ROOT = PROJECT_ROOT / "data" / "datasets"
 WRAPPER = PROJECT_ROOT / "scripts" / "_wsl_solve_wrapper.py"
+CUSTOM_WRAPPER = PROJECT_ROOT / "scripts" / "_wsl_solve_custom.py"
 
 # Tasks ManiSkill ships a panda motion-planning solution for (run.py dispatch list).
-SUPPORTED_TASKS = [
+BUILTIN_TASKS = [
     "PickCube-v1", "StackCube-v1", "PegInsertionSide-v1", "PlugCharger-v1",
     "PushCube-v1", "PullCube-v1", "PullCubeTool-v1", "LiftPegUpright-v1",
     "StackPyramid-v1", "PlaceSphere-v1", "DrawTriangle-v1", "DrawSVG-v1",
 ]
+# This harness's custom envs with their own solution (scripts.custom_solutions).
+CUSTOM_TASKS = [
+    "ThreeColoredCubes-v1",
+]
+SUPPORTED_TASKS = BUILTIN_TASKS + CUSTOM_TASKS
 
 
 def _win_to_wsl(p: Path) -> str:
@@ -64,7 +71,7 @@ def run(
     """Solve `task` `count` times via motion planning. Returns the produced .h5.
 
     The result is a raw trajectory (actions + env_states, obs_mode=none); feed it
-    to `scripts.generate.run(task, traj_path=<this>)` to add RGB observations.
+    to `scripts.h5_add_images.run(task, traj_path=<this>)` to add RGB observations.
     """
     if task not in SUPPORTED_TASKS:
         raise ValueError(
@@ -75,27 +82,42 @@ def run(
     dest_dir = DATASETS_ROOT / task
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    # run.py writes to <record-dir>/<env-id>/motionplanning/<traj-name>.h5
+    # both wrappers write to <record-dir>/<env-id>/motionplanning/<traj-name>.h5
     record_dir = DATASETS_ROOT
     produced = dest_dir / "motionplanning" / f"{traj_name}.h5"
 
-    inner = [
-        f"export VK_ICD_FILENAMES={WSL_VK_ICD};",
-        f'"{WSL_PYTHON}"', f'"{_win_to_wsl(WRAPPER)}"',
-        "-e", task,
-        "-n", str(count),
-        "-o", obs_mode,
-        "-b", sim_backend,
-        "--record-dir", f'"{_win_to_wsl(record_dir)}"',
-        "--traj-name", traj_name,
-        "--num-procs", str(num_procs),
-    ]
-    if only_success:
-        inner.insert(-2, "--only-count-success")
+    prefix = [f"export VK_ICD_FILENAMES={WSL_VK_ICD};", f'"{WSL_PYTHON}"']
+    if task in CUSTOM_TASKS:
+        # our own seed-loop generator over a custom solution
+        inner = prefix + [
+            f'"{_win_to_wsl(CUSTOM_WRAPPER)}"',
+            "--task", task,
+            "--count", str(count),
+            "--obs-mode", obs_mode,
+            "--sim-backend", sim_backend,
+            "--record-dir", f'"{_win_to_wsl(record_dir)}"',
+            "--traj-name", traj_name,
+        ]
+        if only_success:
+            inner.append("--only-success")
+    else:
+        # ManiSkill's built-in run.py (panda solutions)
+        inner = prefix + [
+            f'"{_win_to_wsl(WRAPPER)}"',
+            "-e", task,
+            "-n", str(count),
+            "-o", obs_mode,
+            "-b", sim_backend,
+            "--record-dir", f'"{_win_to_wsl(record_dir)}"',
+            "--traj-name", traj_name,
+            "--num-procs", str(num_procs),
+        ]
+        if only_success:
+            inner.insert(-2, "--only-count-success")
     bash_cmd = " ".join(inner)
 
     if verbose:
-        print(f"[solve] WSL command:\n  {bash_cmd}\n")
+        print(f"[task_to_h5] WSL command:\n  {bash_cmd}\n")
 
     proc = subprocess.run(
         ["wsl.exe", "-d", WSL_DISTRO, "--", "bash", "-lc", bash_cmd],
@@ -103,7 +125,7 @@ def run(
     )
     if proc.returncode != 0:
         raise RuntimeError(
-            f"[solve] WSL motion planning failed (exit {proc.returncode}).\n"
+            f"[task_to_h5] WSL motion planning failed (exit {proc.returncode}).\n"
             f"--- stderr tail ---\n{proc.stderr[-2000:]}\n"
             f"Check that the WSL env is set up (see README 'WSL 환경 준비')."
         )
@@ -114,11 +136,11 @@ def run(
     if tail:
         last = tail[-1]
         metrics = last[last.find("success_rate"):].rstrip("] ")
-        print("[solve] " + metrics.encode("ascii", "ignore").decode())
+        print("[task_to_h5] " + metrics.encode("ascii", "ignore").decode())
 
     if not produced.exists():
         raise RuntimeError(
-            f"[solve] WSL run reported success but {produced} is missing.\n"
+            f"[task_to_h5] WSL run reported success but {produced} is missing.\n"
             f"--- stdout ---\n{proc.stdout[-1000:]}"
         )
 

@@ -1,4 +1,4 @@
-"""Render media (MP4 video / PNG grid) from a saved trajectory HDF5.
+"""Render media (MP4 video / PNG grid) from a saved dataset HDF5.
 
 No simulator runs here — reads pre-recorded RGB frames out of the HDF5 and
 assembles them into a media file. Designed for inline notebook display.
@@ -8,8 +8,8 @@ Two functions:
   - preview(traj_path, n=9, out=None, frame='mid') -> Path
 
 CLI:
-  python scripts/render.py video --traj-path X --episode 0
-  python scripts/render.py preview --traj-path X --n 9
+  python scripts/h5_to_media.py video --traj-path X --episode 0
+  python scripts/h5_to_media.py preview --traj-path X --n 9
 """
 from __future__ import annotations
 
@@ -121,7 +121,7 @@ def _cli() -> None:
         out = video(args.traj_path, args.episode, args.out, args.fps, args.camera)
     else:
         out = preview(args.traj_path, args.n, args.out, args.frame, args.camera)
-    print(f"\nrender -> {out}")
+    print(f"\nh5_to_media -> {out}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """WSL-side wrapper for action generation via ManiSkill motion planning.
 
-This file is NOT meant to run on Windows. `scripts/solve.py` invokes it through
+This file is NOT meant to run on Windows. `scripts/task_to_h5.py` invokes it through
 `wsl.exe` using the WSL conda env's Python (it sits on the shared C: drive and is
 reached via /mnt/c/...). It applies the two workarounds needed to run sapien
 headless on WSL's software (llvmpipe) Vulkan, then delegates to ManiSkill's
