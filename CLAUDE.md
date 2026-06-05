@@ -1,6 +1,6 @@
 # ManiSkill 하네스
 
-[ManiSkill3](https://www.maniskill.ai) 위에 얹은 Windows용 VLA 데이터셋 생성 하네스. **task 환경**에서 로봇 팔의 **행동 궤적(.h5)** 을 만들고, 거기에 카메라 이미지를 입혀 **(이미지 + 액션) 데이터셋(.h5)** 을 만든 뒤, 영상·뷰어로 확인하는 도구 모음.
+[ManiSkill3](https://www.maniskill.ai) 위에 얹은 Windows용 VLA 데이터셋 생성 하네스. **task 환경**에서 로봇 팔의 **행동 궤적(.h5)** 을 만들고, 거기에 카메라 이미지를 입혀 **(이미지 + 액션) 데이터셋(.h5)** 을 만든 뒤, 품질 리포트·뷰어로 확인하는 도구 모음.
 
 핵심 개념 두 개: **환경 = task**, **행동 = .h5**.
 
@@ -16,7 +16,7 @@
 ② h5_add_images      궤적을 리플레이하며 카메라 이미지를 입힘 → 데이터셋 .h5
         ↓
 ③ 확인
-   h5_to_media          MP4 영상 / PNG 그리드 추출
+   h5_report            랜덤 N개 에피소드 품질 리포트 (MD: 메타 + 필름스트립 + mp4)
    view_task            환경 뷰어 창 (씬 둘러보기)
    replay_h5            저장된 에피소드 뷰어 재생
    check_maniskill_env  환경 헬스체크 (전제조건 점검)
@@ -30,8 +30,8 @@
 |---|---|---|
 | `/fetch_sample_h5` | 공식 데모 궤적 다운로드 → `data/` (멱등) | `scripts/fetch_sample_h5.py` |
 | `/task_to_h5` | 모션 플래닝으로 행동 궤적 직접 생성 (**WSL 구동**) | `scripts/task_to_h5.py` |
-| `/h5_add_images` | 궤적 리플레이 → 카메라 이미지 입힌 데이터셋 | `scripts/h5_add_images.py` |
-| `/h5_to_media` | 데이터셋 → MP4 영상 / PNG 그리드 | `scripts/h5_to_media.py` |
+| `/h5_add_images` | 궤적 리플레이 → 카메라 이미지 입힌 데이터셋 (+ 재현율 출력) | `scripts/h5_add_images.py` |
+| `/h5_report` | 데이터셋 → 랜덤 에피소드 품질 리포트 (MD: 메타+필름스트립+mp4) | `scripts/h5_report.py` |
 | `/view_task` | SAPIEN 뷰어 창 — 환경 둘러보기 | `scripts/view_task.py` |
 | `/replay_h5` | SAPIEN 뷰어 창 — 저장된 에피소드 재생 | `scripts/replay_h5.py` |
 | `/check_maniskill_env` | 환경 헬스체크 (import / CPU 시뮬 / CPU 렌더) | `scripts/check_maniskill_env.py` |
@@ -43,7 +43,8 @@ Python 함수 진입점:
 | `scripts.fetch_sample_h5` | `run(task, force=False)` |
 | `scripts.task_to_h5` | `run(task, count, traj_name, obs_mode, sim_backend, only_success, ...)` |
 | `scripts.h5_add_images` | `run(task, count, obs_mode, traj_path, num_envs, ...)` |
-| `scripts.h5_to_media` | `video(traj, episode, ...)`, `preview(traj, n, ...)` |
+| `scripts.h5_report` | `run(traj_path, n=3, seed, fps, ...)` |
+| `scripts.h5_to_media` *(라이브러리)* | `video(...)`, `preview(...)`, `card(...)` — h5_report가 사용 |
 | `scripts.view_task` | `run(task, shader, blocking=False)` |
 | `scripts.replay_h5` | `run(traj_path, episode, shader, blocking=False)` |
 | `scripts.check_maniskill_env` | `run()` |
@@ -104,7 +105,7 @@ maniskill/
    [--traj-path ...]                 #   fetch 궤적(trajectory.h5)을 입력으로 쓰려면 지정
         ↓ <source-stem>.<obs>.<ctrl>.<sim>.h5  (데이터셋)
 # ③ 확인
-/h5_to_media video|preview <hdf5> ...   # 영상/이미지 추출 (파일 출력)
+/h5_report <hdf5> [n]                    # 랜덤 N개 에피소드 품질 리포트 (MD: 메타+필름스트립+mp4)
 /view_task <task>                       # 환경 뷰어 창
 /replay_h5 <hdf5> [episode]             # 에피소드 뷰어 재생
 /check_maniskill_env                    # 환경 헬스체크
@@ -143,7 +144,7 @@ ManiSkill이 panda 모션플래닝 솔루션을 제공하는 빌트인 12개:
 
 ## 커스텀 task 추가하기
 
-태스크별 지식은 **환경 클래스 하나(`scripts/custom_envs.py`)** 에만 둔다. 소비 스킬(`h5_add_images`/`h5_to_media`/`view_task`/`replay_h5`)은 태스크 이름을 모르고 약속만 따르므로, 새 task를 추가해도 **소비자 코드는 안 건드린다**.
+태스크별 지식은 **환경 클래스 하나(`scripts/custom_envs.py`)** 에만 둔다. 소비 스킬(`h5_add_images`/`h5_report`/`view_task`/`replay_h5`; `h5_to_media`는 h5_report의 렌더 라이브러리)은 태스크 이름을 모르고 약속만 따르므로, 새 task를 추가해도 **소비자 코드는 안 건드린다**.
 
 1. `scripts/custom_envs.py` 에 `@register_env("<id>", ...)` 환경 클래스:
    - `_load_scene` / `_initialize_episode` / `evaluate` — 씬 구성, 시드 랜덤화, 성공 판정
@@ -157,6 +158,9 @@ ManiSkill이 panda 모션플래닝 솔루션을 제공하는 빌트인 12개:
 - `scripts/h5_add_images.py`의 `gym.make` monkey-patch — `render_backend='cpu'` 기본값 주입. (`view_task.py`/`replay_h5.py`는 `gym.make` 호출에 `render_backend='cpu'`를 직접 명시.) Windows GPU 렌더 경로가 동작 불가능하므로 이 우회 필요.
 - `scripts/_wsl_solve_wrapper.py`·`_wsl_solve_custom.py`의 우회 — ① `render_backend='cpu'` 주입 ② `RenderSystem` 실패 시 인자 없이 재호출(llvmpipe 자동 선택) ③ 호출자(`task_to_h5.py`)의 `VK_ICD_FILENAMES`=lavapipe. WSL headless 동작의 핵심.
 - `scripts/h5_add_images.py`의 `if __name__ == "__main__":` 가드 — Windows multiprocessing은 `spawn` 방식이라 가드가 없으면 자식 프로세스가 무한 spawn 루프에 빠짐.
+- `scripts/h5_to_media.py`의 trajectory 키 정렬은 **숫자순**(`int(k.split("_")[1])`) 필수 — 사전순(`sorted`)이면 에피소드 10개↑에서 `traj_10`이 `traj_2` 앞에 와 `--episode N` 인덱싱이 어긋남. `h5_report`·`card`·`video`가 모두 이 정렬에 의존.
+- `scripts/h5_add_images.py`는 끝에 **재현율**(입력 success 대비 리플레이 success)을 출력 — WSL↔Windows 크로스-백엔드 발산 감지용 best-effort 경고(데이터는 안 지움).
+- `scripts/h5_report.py`는 `scripts/h5_to_media.py`의 렌더러(`card`/`video`)를 재사용하는 소비 스킬. `h5_to_media`는 스킬이 아니라 **라이브러리** — 슬래시 커맨드 없음.
 - `scripts/task_to_h5.py`의 subprocess는 `encoding='utf-8', errors='replace'` 필수 — WSL이 UTF-8(tqdm 유니코드)을 뱉는데 Windows 기본 cp949로 디코드하면 깨짐.
 - `label_metadata` 훅의 제네릭성 — 소비자는 태스크 이름을 몰라야 한다. 메타데이터는 환경이 선언(`_get_obs_extra` / `label_metadata`)하고 소비자는 그 약속만 따른다. 태스크별 분기를 소비 스크립트에 넣지 말 것.
 - 함수 인터페이스와 CLI 인터페이스의 동등성 — 새 옵션 추가 시 양쪽에 일관되게 반영.

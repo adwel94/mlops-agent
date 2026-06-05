@@ -74,6 +74,42 @@ def _resolve_control_mode(traj_path: Path, target_control_mode: str | None) -> s
     return meta["env_info"]["env_kwargs"].get("control_mode", "pd_joint_pos")
 
 
+def _count_success(sidecar: Path) -> tuple[int, int] | None:
+    """Return (n_success, n_total) from a trajectory sidecar's per-episode flags.
+
+    Returns None if the sidecar is missing or has no per-episode success info.
+    """
+    if not sidecar.exists():
+        return None
+    eps = json.loads(sidecar.read_text()).get("episodes")
+    if not eps:
+        return None
+    n_success = sum(1 for e in eps if e.get("success"))
+    return n_success, len(eps)
+
+
+def _report_reproduction(src: Path, dest: Path) -> None:
+    """Print how many of the input's successful episodes the replay reproduced.
+
+    The input success is computed by the producer (e.g. task_to_h5 solving in WSL);
+    the dataset success is recomputed here while replaying on the Windows CPU
+    backend. A drop signals cross-backend physics divergence — surfaced as a
+    warning, not a failure. Best-effort: silent if either sidecar lacks the info.
+    """
+    src_c = _count_success(src.with_suffix(".json"))
+    dst_c = _count_success(dest.with_suffix(".json"))
+    if src_c is None or dst_c is None:
+        return
+    src_ok, _ = src_c
+    dst_ok, _ = dst_c
+    if src_ok == 0:
+        return
+    print(f"[h5_add_images] success reproduced: {dst_ok}/{src_ok} ({dst_ok / src_ok:.0%})")
+    if dst_ok < src_ok:
+        print(f"[h5_add_images] warning: {src_ok - dst_ok} episode(s) did not reproduce "
+              f"(WSL->Windows backend drift?)")
+
+
 def _write_label_metadata(task: str, dataset_json: Path) -> None:
     """If the env exposes label_metadata(), stamp it into the dataset's sidecar.
 
@@ -178,6 +214,10 @@ def run(
     # stamp the env's integer-label decoder into the dataset sidecar (generic; a
     # no-op for envs that don't define label_metadata)
     _write_label_metadata(task, dest.with_suffix(".json"))
+
+    # one-line fidelity summary: did the Windows replay reproduce the input's
+    # successes? (cheap — both counts already live in the sidecars)
+    _report_reproduction(src, dest)
     return dest
 
 
