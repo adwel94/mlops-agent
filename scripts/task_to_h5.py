@@ -46,6 +46,7 @@ BUILTIN_TASKS = [
 # This harness's custom envs with their own solution (scripts.custom_solutions).
 CUSTOM_TASKS = [
     "ThreeColoredCubes-v1",
+    "ColoredCubeInBowl-v1",
 ]
 SUPPORTED_TASKS = BUILTIN_TASKS + CUSTOM_TASKS
 

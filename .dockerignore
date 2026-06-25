@@ -1,0 +1,15 @@
+# 빌드 컨텍스트 최소화 — 이미지엔 cloud/runpod 만 들어간다(Dockerfile COPY).
+# 큰/불필요 항목은 데몬으로 안 보냄 → 빌드 빠름.
+.git
+.idea
+.claude
+data
+notebooks
+scripts
+*.md
+.env
+.env.example
+.env.local
+**/__pycache__
+*.pyc
+.ipynb_checkpoints

@@ -147,3 +147,166 @@ class ThreeColoredCubesEnv(PickCubeEnv):
         for (name, _), cube in zip(CUBE_COLORS, self.cubes):
             obs[f"{name}_cube_pose"] = cube.pose.raw_pose
         return obs
+
+
+@register_env("ColoredCubeInBowl-v1", max_episode_steps=100)
+class ColoredCubeInBowlEnv(PickCubeEnv):
+    """Pick the seed-chosen colored cube and drop it into a bowl.
+
+    Same language-conditioned setup as ThreeColoredCubes (three red/green/blue
+    cubes, a seeded target), but the goal is *place into a container* rather than
+    lift: success = the target cube comes to rest inside the bowl, released and
+    static. The bowl is a shallow box-walled tray (self-contained: no mesh asset
+    download, no mesh-collision IK surprises). Cubes spawn in the near (-x) zone,
+    the bowl in the far (+x) zone, so they never overlap and both stay reachable.
+
+    Reuses the exact contracts the consumer skills follow: primary camera
+    'base_camera' (inherited from PickCubeEnv), tcp_pose in _get_obs_extra,
+    evaluate() -> {"success": ...}, and label_metadata() for the color decoder.
+    """
+
+    # bowl tray geometry (half-extents, metres)
+    bowl_wall_half = 0.005       # half thickness of floor/walls
+    bowl_inner_half = 0.06       # half side of the inner square (fits a 0.04 cube)
+    bowl_wall_height_half = 0.025  # half height of the walls
+
+    @property
+    def _default_human_render_camera_configs(self):
+        pose = sapien_utils.look_at(eye=[0.4, 0.4, 0.5], target=[0.0, 0.0, 0.08])
+        return CameraConfig("render_camera", pose, 512, 512, 1, 0.01, 100)
+
+    def _build_bowl(self):
+        t = self.bowl_wall_half
+        inner = self.bowl_inner_half
+        wall_h = self.bowl_wall_height_half
+        mat = sapien.render.RenderMaterial(base_color=[0.75, 0.6, 0.4, 1.0])
+        builder = self.scene.create_actor_builder()
+
+        # floor plate: rests on the table (bottom face at z=0, top at z=2t)
+        floor_half = [inner + 2 * t, inner + 2 * t, t]
+        builder.add_box_collision(sapien.Pose([0, 0, t]), floor_half)
+        builder.add_box_visual(sapien.Pose([0, 0, t]), floor_half, material=mat)
+
+        # four upright walls sitting on the floor plate
+        wz = 2 * t + wall_h
+        walls = [
+            (sapien.Pose([inner + t, 0, wz]), [t, inner + 2 * t, wall_h]),   # +x
+            (sapien.Pose([-inner - t, 0, wz]), [t, inner + 2 * t, wall_h]),  # -x
+            (sapien.Pose([0, inner + t, wz]), [inner + 2 * t, t, wall_h]),   # +y
+            (sapien.Pose([0, -inner - t, wz]), [inner + 2 * t, t, wall_h]),  # -y
+        ]
+        for pose, half in walls:
+            builder.add_box_collision(pose, half)
+            builder.add_box_visual(pose, half, material=mat)
+
+        builder.initial_pose = sapien.Pose(p=[0, 0, 0])
+        return builder.build_kinematic(name="bowl")
+
+    def _load_scene(self, options: dict):
+        self.table_scene = TableSceneBuilder(
+            self, robot_init_qpos_noise=self.robot_init_qpos_noise
+        )
+        self.table_scene.build()
+
+        self.cubes = []
+        for name, color in CUBE_COLORS:
+            cube = actors.build_cube(
+                self.scene,
+                half_size=self.cube_half_size,
+                color=color,
+                name=f"cube_{name}",
+                initial_pose=sapien.Pose(p=[0, 0, self.cube_half_size]),
+            )
+            self.cubes.append(cube)
+        self.cube = self.cubes[0]   # keep parent code paths happy
+        self.bowl = self._build_bowl()
+
+    def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
+        with torch.device(self.device):
+            b = len(env_idx)
+            self.table_scene.initialize(env_idx)
+
+            # cubes in the near (-x) zone; rejection-sample non-overlapping xy.
+            min_sep = self.cube_half_size * 2 * 1.8
+            n = len(self.cubes)
+            positions = torch.zeros((n, b, 2))
+            for e in range(b):
+                chosen: list[torch.Tensor] = []
+                for _ in range(n):
+                    xy = torch.tensor([
+                        float(torch.rand(1)) * 0.10 - 0.12,   # x in [-0.12, -0.02]
+                        float(torch.rand(1)) * 0.24 - 0.12,   # y in [-0.12,  0.12]
+                    ])
+                    for _try in range(100):
+                        if all(torch.linalg.norm(xy - c) >= min_sep for c in chosen):
+                            break
+                        xy = torch.tensor([
+                            float(torch.rand(1)) * 0.10 - 0.12,
+                            float(torch.rand(1)) * 0.24 - 0.12,
+                        ])
+                    chosen.append(xy)
+                for ci, xy in enumerate(chosen):
+                    positions[ci, e] = xy
+
+            for ci, cube in enumerate(self.cubes):
+                xyz = torch.zeros((b, 3))
+                xyz[:, :2] = positions[ci]
+                xyz[:, 2] = self.cube_half_size
+                qs = randomization.random_quaternions(b, lock_x=True, lock_y=True)
+                cube.set_pose(Pose.create_from_pq(xyz, qs))
+
+            # bowl in the far (+x) zone, drawn from the same seeded RNG.
+            bowl_xyz = torch.zeros((b, 3))
+            bowl_xyz[:, 0] = torch.rand(b) * 0.08 + 0.02   # x in [0.02, 0.10]
+            bowl_xyz[:, 1] = torch.rand(b) * 0.16 - 0.08   # y in [-0.08, 0.08]
+            self.bowl.set_pose(Pose.create_from_pq(bowl_xyz))
+
+            # one more seeded draw -> the target cube (reproduces on replay)
+            self.target_id = torch.randint(0, len(self.cubes), (b,))
+
+    def target_color(self, env_i: int = 0) -> str:
+        return CUBE_COLORS[int(self.target_id[env_i])][0]
+
+    def label_metadata(self) -> dict:
+        return {"target_id": [name for name, _ in CUBE_COLORS]}
+
+    def evaluate(self):
+        ar = torch.arange(self.num_envs, device=self.device)
+        idx = self.target_id.to(self.device)
+
+        cube_p = torch.stack([c.pose.p for c in self.cubes], dim=0)[idx, ar]   # (b,3)
+        bowl_p = self.bowl.pose.p                                              # (b,3)
+        offset = cube_p - bowl_p
+        # target cube centred over the bowl floor and resting low (not held up)
+        xy_in = torch.linalg.norm(offset[:, :2], axis=1) <= (
+            self.bowl_inner_half - self.cube_half_size
+        )
+        z_low = (offset[:, 2] >= 0.0) & (offset[:, 2] <= 0.06)
+        in_bowl = xy_in & z_low
+
+        grasped = torch.stack(
+            [self.agent.is_grasping(c) for c in self.cubes], dim=0)[idx, ar]   # (b,)
+        cube_static = torch.stack(
+            [c.is_static(lin_thresh=1e-2, ang_thresh=0.5) for c in self.cubes],
+            dim=0)[idx, ar]
+        success = in_bowl & (~grasped) & cube_static
+        return {"success": success, "in_bowl": in_bowl, "is_grasped": grasped}
+
+    def compute_dense_reward(self, obs, action, info):
+        return torch.zeros(self.num_envs, device=self.device)
+
+    def compute_normalized_dense_reward(self, obs, action, info):
+        return self.compute_dense_reward(obs, action, info)
+
+    def _get_obs_extra(self, info: dict):
+        obs = dict(
+            tcp_pose=self.agent.tcp_pose.raw_pose,
+            target_id=self.target_id,
+            bowl_pose=self.bowl.pose.raw_pose,
+        )
+        all_poses = torch.stack([c.pose.raw_pose for c in self.cubes], dim=0)  # (n,b,7)
+        idx = self.target_id.to(all_poses.device)
+        obs["target_pose"] = all_poses[idx, torch.arange(self.num_envs)]       # (b,7)
+        for (name, _), cube in zip(CUBE_COLORS, self.cubes):
+            obs[f"{name}_cube_pose"] = cube.pose.raw_pose
+        return obs

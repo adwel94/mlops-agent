@@ -1,0 +1,142 @@
+"""Roll out a trained GR00T policy in sim and report task success rate (WSL).
+
+Path-A deployment eval, step ④-eval. The GR00T policy (GPU) runs as a ZMQ server on
+a remote box (RunPod); this Windows-side orchestrator launches the rollout client in
+WSL (scripts/_wsl_gr00t_eval.py — sim + mplib IK, no torch), which connects to that
+server, drives a closed-loop rollout, and reports success rate. Mirrors scripts.ee_verify's
+WSL-invocation pattern.
+
+Input is the SOURCE image dataset h5 (h5_add_images output) — not the lerobot dir —
+because the rollout needs each episode's `episode_seed` (to reset the scene) and
+`label_metadata` (to build the same instruction the model trained on). So the order is
+h5_to_lerobot -> train (cloud) -> serve policy -> gr00t_eval against the source dataset.
+
+Prereq (one-time, in the WSL maniskill env):  pip install pyzmq msgpack msgpack-numpy
+Serve the policy on RunPod: cloud/runpod/serve_policy.sh  (exposes tcp port).
+
+  - Python:  from scripts.gr00t_eval import run; run("data/.../*.rgb.*.h5", server_host="...")
+  - CLI:     python scripts/gr00t_eval.py --traj-path data/.../*.rgb.*.h5 --server-host <ip>
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    from scripts.task_to_h5 import WSL_DISTRO, WSL_PYTHON, WSL_VK_ICD, _win_to_wsl
+except ImportError:  # run as a script: put project root on path
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from scripts.task_to_h5 import WSL_DISTRO, WSL_PYTHON, WSL_VK_ICD, _win_to_wsl
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+WSL_SCRIPT = PROJECT_ROOT / "scripts" / "_wsl_gr00t_eval.py"
+
+
+def run(
+    traj_path: str | Path,
+    server_host: str,
+    server_port: int = 5555,
+    task: str | None = None,
+    count: int = 10,
+    seed: int = 0,
+    max_steps: int = 0,
+    action_steps: int = 16,
+    instruction: str | None = None,
+    sim_backend: str = "cpu",
+    verbose: bool = False,
+) -> dict:
+    """Roll out the GR00T policy served at server_host:server_port over a sample of
+    `traj_path`'s episodes, in sim via mplib IK, and report success rate.
+
+    A random `count` episodes (reproducible via `seed`); `count=0` = all. `max_steps=0`
+    uses each recorded episode's length as the step budget. `instruction` is a template
+    over the dataset's label_metadata keys (e.g. "pick up the {target_id} cube"); when
+    omitted, the decoded label is used (must match what h5_to_lerobot trained on).
+    `task` defaults to the sidecar's env_id.
+    """
+    traj_path = Path(traj_path)
+    if not traj_path.exists():
+        raise FileNotFoundError(
+            f"Dataset not found: {traj_path}\n"
+            f"Need the source image dataset (h5_add_images output) with obs/extra/tcp_pose, "
+            f"episode_seed, and label_metadata — NOT the lerobot/ dir."
+        )
+    if task is None:
+        meta = json.loads(traj_path.with_suffix(".json").read_text())
+        task = meta["env_info"]["env_id"]
+
+    inner = [
+        f"export VK_ICD_FILENAMES={WSL_VK_ICD};", f'"{WSL_PYTHON}"',
+        f'"{_win_to_wsl(WSL_SCRIPT)}"',
+        "--task", task,
+        "--traj-path", f'"{_win_to_wsl(traj_path)}"',
+        "--server-host", server_host,
+        "--server-port", str(server_port),
+        "--count", str(count),
+        "--seed", str(seed),
+        "--max-steps", str(max_steps),
+        "--action-steps", str(action_steps),
+        "--sim-backend", sim_backend,
+    ]
+    if instruction:
+        inner += ["--instruction", f'"{instruction}"']
+    bash_cmd = " ".join(inner)
+    if verbose:
+        print(f"[gr00t_eval] WSL command:\n  {bash_cmd}\n")
+
+    proc = subprocess.run(
+        ["wsl.exe", "-d", WSL_DISTRO, "--", "bash", "-lc", bash_cmd],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"[gr00t_eval] WSL execution failed (exit {proc.returncode}).\n"
+            f"--- stderr tail ---\n{proc.stderr[-2000:]}\n"
+            f"Check: WSL env has pyzmq/msgpack/msgpack-numpy, and the policy server "
+            f"is reachable at {server_host}:{server_port}."
+        )
+
+    m = re.search(r"DONE gr00t_eval (.+)", out)
+    if not m:
+        raise RuntimeError(
+            f"[gr00t_eval] WSL run produced no result line.\n"
+            f"--- output tail ---\n{out[-1500:]}"
+        )
+    line = m.group(1).strip()
+    print("[gr00t_eval] " + line.encode("ascii", "ignore").decode())
+    return dict(re.findall(r"(\w+)=(\S+)", line))
+
+
+def _cli() -> None:
+    import argparse
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("--traj-path", required=True)
+    p.add_argument("--server-host", required=True,
+                   help="host of the GR00T policy server (RunPod TCP proxy or tunnel)")
+    p.add_argument("--server-port", type=int, default=5555)
+    p.add_argument("--task", default=None)
+    p.add_argument("--count", type=int, default=10,
+                   help="random sample size; 0 = all episodes")
+    p.add_argument("--seed", type=int, default=0, help="reproducible random sample")
+    p.add_argument("--max-steps", type=int, default=0,
+                   help="per-episode step budget; 0 = recorded episode length")
+    p.add_argument("--action-steps", type=int, default=16,
+                   help="actions executed per replan (<= GR00T action horizon)")
+    p.add_argument("--instruction", default=None,
+                   help="template over label_metadata keys, e.g. \"pick up the {target_id} cube\"")
+    p.add_argument("--sim-backend", default="cpu")
+    p.add_argument("--verbose", action="store_true")
+    args = p.parse_args()
+    run(args.traj_path, server_host=args.server_host, server_port=args.server_port,
+        task=args.task, count=args.count, seed=args.seed, max_steps=args.max_steps,
+        action_steps=args.action_steps, instruction=args.instruction,
+        sim_backend=args.sim_backend, verbose=args.verbose)
+
+
+if __name__ == "__main__":
+    _cli()
