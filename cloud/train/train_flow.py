@@ -181,12 +181,20 @@ def upload_checkpoint(p: FlowParameters) -> None:
     api.create_repo(p.hf_output_repo, exist_ok=True)
     if p.hf_output_branch != "main":
         api.create_branch(repo_id=p.hf_output_repo, branch=p.hf_output_branch, exist_ok=True)
-    # 체크포인트(재시도 전용)·resume 상태는 제외 → repo 엔 서빙 가능한 최종 모델만.
+    # 체크포인트(재시도 전용)·resume 상태·실험 작업 서브디렉토리는 제외 → repo 엔 서빙 가능한
+    # 최종 모델만. huggingface_hub 의 ignore_patterns 는 fnmatch 라 `*` 가 `/` 도 포함하므로
+    # 선행 `*` 로 **모든 깊이**를 잡는다 (예전 "checkpoint-*" 는 최상위만 잡아 중첩
+    # `gr00t-ft-<hash>/checkpoint-250/...` 가 새던 버그). `gr00t-ft-*` 는 GR00T 가 만드는 실험
+    # 작업 디렉토리(루트 최종모델의 중복본 + 체크포인트) 전체를 제외 — 실험명 기본값 "gr00t-ft".
     api.upload_folder(
         folder_path=model_dir,
         repo_id=p.hf_output_repo,
         revision=p.hf_output_branch,
-        ignore_patterns=["checkpoint-*", "checkpoint-*/*", "optimizer.pt", "scheduler.pt", "rng_state*.pth"],
+        ignore_patterns=[
+            "*checkpoint-*",                                   # 모든 깊이의 체크포인트
+            "*optimizer.pt", "*scheduler.pt", "*rng_state*.pth",  # 옵티마이저/스케줄러/rng 상태
+            "gr00t-ft-*",                                      # 실험 작업 서브디렉토리(중복 모델 포함) 전체
+        ],
         commit_message=f"GR00T finetune final model (max_steps={p.training.max_steps})",
     )
     url = f"https://huggingface.co/{p.hf_output_repo}/tree/{p.hf_output_branch}"

@@ -153,7 +153,8 @@ maniskill/
 │   └── _wsl_solve_custom.py      커스텀 task용 WSL 생성기
 ├── cloud/                 클라우드 운영 스킬 (RunPod GPU 파드, 과금)
 │   ├── train/                GR00T 파인튜닝 컨트롤러 (launch_train.py)
-│   └── runpod/               파드 생성/서빙/목록/종료 (runpod_up·serve_up·runpod_ls·runpod_down)
+│   ├── runpod/               파드 생성/서빙/목록/종료 (runpod_up·serve_up·runpod_ls·runpod_down)
+│   └── reaper/               파드 종료를 RunPod 밖에서 보장하는 Cloudflare Worker (15분 크론 + Discord 버튼)
 ├── notebooks/             로컬 스킬별 사용 예제 (사용법 + 파라미터)
 ├── data/                  생성된 데이터셋/미디어 (gitignore, 재생성 가능)
 │   └── datasets/<task>/

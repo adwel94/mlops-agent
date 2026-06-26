@@ -33,6 +33,7 @@
 - **조용한 우회/변경 금지** — 패키지 설치, 도구 대체, 스펙·인터페이스 변경, 임시 mock/더미 작성은 **먼저 승인**. 작동 중인 conda/venv 환경은 안 건드린다.
 - **과금·비가역 작업은 확인 먼저** — RunPod 파드 생성, 이미지 push, 리포 삭제/덮어쓰기 등은 실행 전 한 줄 확인. (빌드처럼 무과금·가역 작업은 진행 가능.)
 - **역할 분담** — AI: 코드·빌드·로컬 분석. 사용자: 시크릿·콘솔 로그·승인. 모니터링은 파드가 push(Discord/W&B)하고 AI는 *가끔* 조회(턴 기반 — 백그라운드 데몬 아님).
+- **장시간 클라우드 작업 폴링 패턴** — 파드 부팅·학습·serve 같은 **하네스가 추적 못 하는 외부 상태**(내가 시작한 로컬 작업이 아니라 RunPod이 도는 것)는 자동 알림이 안 오므로 **직접 폴링**한다. 방식: `Bash`를 `run_in_background`로 띄워 **`sleep <N초> && <확인 명령>`**(확인 = `read_logs.py`/`runpod_ls.py` 등)을 걸면, sleep+확인이 끝날 때 task-notification 이 와서 출력을 읽고 다음 수를 정한다. **각 폴링은 일회성**(sleep 1번 → 확인 1번 → 알림 → 판정)이라 턴 기반이며 지속 데몬이 아니다(루프로 계속 돌리면 선을 넘음). 간격 가이드: 부팅/접속대기 ~수분(5~8분), 학습 진행 ~10~15분, stall 의심 시 더 촘촘히. 포그라운드 `sleep`은 하네스가 막으므로 반드시 백그라운드로.
 
 ## 흐름
 
@@ -119,7 +120,7 @@ Python 함수 진입점:
 | `cloud.runpod.runpod_up` | `run(name, gpu, ..., mode="idle", hf_dataset=None, hf_model=None, ...)` |
 | `scripts.gr00t_eval` | `run(traj_path, server_host, server_port=5555, task=None, count=10, seed=0, instruction=None, action_steps=16, ...)` — WSL 롤아웃 (`ik_exec` 를 ee_verify 와 공유) |
 
-서빙은 `runpod_up` 의 한 *모드*(MODE=serve)일 뿐 — `gr00t_serve` 는 거기에 서빙 기본값(A5000 24GB, hf_model 필수, 5555 포트)을 박은 얇은 래퍼. 학습은 전용 이미지(`maniskill-gr00t-train`)·전용 컨트롤러(`launch_train.py`)로 분리돼 있고, 파드가 부팅 때 Prefect flow(prepare→repair→train→upload→self_terminate)를 자급 실행한다. 평가(④ 롤아웃)는 `/gr00t_eval` 스킬 — 성공 기준은 태스크 환경의 `evaluate().success`(시뮬에서 과제를 실제로 해냈나) 그대로다. IK 실행부(`ik_exec.py`)를 `ee_verify` 와 공유하므로, 조용히 거짓말할 위험이 큰 경로(env 구성/프레임 변환/mplib IK/sim 스텝)는 ee_verify 게이트로 이미 검증된다. 출력의 `orig_success`(기록 에피소드 성공률, ~100% 기대)가 매 실행 자가 기준점.
+서빙은 `runpod_up` 의 한 *모드*(MODE=serve)일 뿐 — `gr00t_serve` 는 거기에 서빙 기본값(A5000 24GB, hf_model 필수, 5555 포트)을 박은 얇은 래퍼. 학습은 전용 이미지(`maniskill-gr00t-train`)·전용 컨트롤러(`launch_train.py`)로 분리돼 있고, 파드가 부팅 때 Prefect flow(prepare→repair→train→upload→request_termination)를 자급 실행한다. **종료는 파드가 자기를 RunPod API로 못 죽이므로(파드→RunPod 호출은 데이터센터 공유 egress IP가 RunPod WAF/레이트리밋에 걸려 랜덤 403) 외부 Cloudflare Worker(`cloud/reaper`)에 위임**한다 — 파드는 3초마다 Worker에 종료요청을 보내고(살아있음=아직 안 죽음, 죽을 때까지 반복; 2번째부터 RunPod 채널로도 직접 알림), 실제 DELETE는 RunPod 밖에서 100% 도는 Worker가 수행한다. Worker는 추가로 15분 크론으로 1h 초과한 orphan 파드를 Discord 버튼 알림으로 잡는다(하드 크래시로 핑조차 못 보낸 파드 대비). `WORKER_TERMINATE_URL` 미설정 시 파드는 옛 직접삭제로 폴백(`_direct_delete_fallback`). 평가(④ 롤아웃)는 `/gr00t_eval` 스킬 — 성공 기준은 태스크 환경의 `evaluate().success`(시뮬에서 과제를 실제로 해냈나) 그대로다. IK 실행부(`ik_exec.py`)를 `ee_verify` 와 공유하므로, 조용히 거짓말할 위험이 큰 경로(env 구성/프레임 변환/mplib IK/sim 스텝)는 ee_verify 게이트로 이미 검증된다. 출력의 `orig_success`(기록 에피소드 성공률, ~100% 기대)가 매 실행 자가 기준점.
 
 ## 디렉토리 구조
 
