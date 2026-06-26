@@ -41,7 +41,7 @@ class TrainingOptions(BaseModel):
 
     # --- 모니터링 ---
     use_wandb: bool = True
-    discord_hook_steps: int = 20         # N 스텝마다 Discord 진행바
+    discord_hook_steps: int = 100        # N 스텝마다 Discord 진행바
 
     @classmethod
     def from_env(cls) -> "TrainingOptions":
