@@ -63,7 +63,7 @@ def run(
     project: str | None = None,
     entity: str | None = None,
 ) -> dict:
-    """run 메트릭을 dict 로 반환하고 사람용 표를 출력한다."""
+    """run 메트릭을 dict 로 반환하고 사람용 표를 출력한다 (순수 로컬 글랜스 — push 안 함)."""
     load_env()
     if not os.getenv("WANDB_API_KEY"):
         raise RuntimeError("WANDB_API_KEY 미설정 — .env 확인.")

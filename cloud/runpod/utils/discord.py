@@ -12,14 +12,15 @@ class DiscordChannel(Enum):
     RUNPOD = "runpod"        # 파드/인프라/과금 (생성·자가종료·종료실패 경보)
     PIPELINE = "pipeline"    # 학습 파이프라인 (시작·진행·완료·업로드·실패)
     STDOUT = "stdout"        # 파드 raw stdout 스트림 (에이전트가 봇 토큰으로 읽음)
+    AI_REPORTING = "ai-reporting"  # AI(에이전트)가 push 하는 분석/추세 다이제스트 (파드 아님)
 
 # 1. 사용할 채널들을 미리 등록합니다.
 # 채널명: 환경변수명 (또는 직접적인 URL도 가능하지만 보안상 환경변수 권장)
 DISCORD_CHANNELS = {
-    DiscordChannel.SAFARI: "SAFARI_WEBHOOK_URL",
     DiscordChannel.RUNPOD: "RUNPOD_WEBHOOK_URL",
     DiscordChannel.PIPELINE: "PIPELINE_WEBHOOK_URL",
     DiscordChannel.STDOUT: "STDOUT_WEBHOOK_URL",
+    DiscordChannel.AI_REPORTING: "AI_REPORTING_WEBHOOK_URL",
 }
 
 def send_discord(text: str, channel: Union[DiscordChannel, str] = DiscordChannel.PIPELINE, components: list = None):
