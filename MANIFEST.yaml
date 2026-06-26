@@ -16,7 +16,15 @@ threecubes:
       dataset: v1
       steps: 3000
       full: false
-      repo: adwel94/gr00t-threecubes-ft   # 구 컨벤션 repo; 신규는 gr00t-threecubes
+      repo: adwel94/gr00t-threecubes-ft
       tag: null
-      eval: 0.2            # gr00t_eval 첫 검증런 (orig 10/10, policy 2/10)
+      eval: 0.2
       date: '2026-06-19'
+    v1-s20000:
+      dataset: v1
+      steps: 20000
+      full: false
+      repo: adwel94/gr00t-threecubes
+      tag: v1-s20000
+      eval: null
+      date: '2026-06-26'
