@@ -1,0 +1,22 @@
+# MANIFEST — 데이터셋·모델 버전 원장 (HF 버전의 단일 출처).
+# 컨벤션: 태스크당 repo 하나 + git 태그로 버전. 큰 데이터는 HF 태그에, 로컬엔 최신
+# 작업본만, 이 파일이 둘을 잇는 지도. 태그는 불변 — 데이터/설정이 바뀌면 새 버전
+# 번호를 쓴다(같은 태그에 덮어쓰지 않음).
+# 자동 append: hf_push_dataset.py(데이터셋) / launch_train.py(모델, eval=null 로 시작).
+# 모델 eval 은 gr00t_eval 후 기록: python scripts/manifest.py set-eval <task> <model> <값>
+threecubes:
+  datasets:
+    v1:
+      episodes: 1000
+      repo: adwel94/maniskill-threecubes-lerobot
+      tag: v1
+      date: '2026-06-19'
+  models:
+    v1-s3000:
+      dataset: v1
+      steps: 3000
+      full: false
+      repo: adwel94/gr00t-threecubes-ft   # 구 컨벤션 repo; 신규는 gr00t-threecubes
+      tag: null
+      eval: 0.2            # gr00t_eval 첫 검증런 (orig 10/10, policy 2/10)
+      date: '2026-06-19'

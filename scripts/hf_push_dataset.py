@@ -106,10 +106,16 @@ def run(
     repo_type: str = "dataset",
     commit_message: str = "upload lerobot dataset",
     verify_only: bool = False,
+    version: str | None = None,
+    task: str | None = None,
 ) -> str:
     """local_dir 을 HF repo_id 로 업로드하고 검증한 뒤 repo URL 을 반환.
 
     verify_only=True 면 업로드를 건너뛰고 기존 repo 만 점검한다(local_dir 무시).
+
+    version 을 주면(예: "v1") 업로드+검증 성공 직후 그 이름의 **불변 git 태그**를 repo 에
+    박고 MANIFEST.yaml 에 한 줄 기록한다. 같은 태그가 이미 있으면 = 버전 충돌 →
+    에러(데이터가 바뀌었으면 새 번호를 쓰라는 신호; 태그는 덮어쓰지 않는다).
     """
     if verify_only:
         return verify(repo_id, repo_type=repo_type)["url"]
@@ -126,6 +132,17 @@ def run(
     from huggingface_hub import HfApi
 
     api = HfApi(token=token)
+
+    # 버전 태그를 박을 거면 업로드 *전에* 충돌부터 막는다 (불변 원칙 — 새 commit 올리고
+    # 나서 태그 막히면 main 만 더럽혀짐). 같은 버전 = 데이터가 같아야 함; 바뀌었으면 새 번호.
+    if version:
+        refs = api.list_repo_refs(repo_id, repo_type=repo_type)
+        if version in {t.name for t in refs.tags}:
+            raise RuntimeError(
+                f"태그 '{version}' 이 이미 {repo_id} 에 존재 — 버전은 불변입니다. "
+                f"데이터가 바뀌었으면 새 버전 번호를 쓰세요(예: 다음 vN)."
+            )
+
     api.create_repo(repo_id, repo_type=repo_type, private=private, exist_ok=True)
     print(f"[hf_push] repo={repo_id} (private={private}) <- {path}")
     api.upload_folder(
@@ -136,7 +153,17 @@ def run(
     )
     url = f"https://huggingface.co/datasets/{repo_id}"
     print(f"[hf_push] upload done -> {url}")
-    verify(repo_id, repo_type=repo_type)  # 업로드 직후 무결성 확인
+    result = verify(repo_id, repo_type=repo_type)  # 업로드 직후 무결성 확인
+
+    if version:
+        api.create_tag(repo_id, tag=version, repo_type=repo_type)
+        print(f"[hf_push] tagged {repo_id}@{version}")
+        from scripts.manifest import add_dataset, slug_from_repo
+        add_dataset(
+            task or slug_from_repo(repo_id), version,
+            episodes=result.get("info", {}).get("total_episodes"),
+            repo=repo_id, tag=version,
+        )
     return url
 
 
@@ -150,10 +177,14 @@ def _cli() -> None:
     p.add_argument("--repo-type", default="dataset")
     p.add_argument("--message", default="upload lerobot dataset")
     p.add_argument("--verify-only", action="store_true", help="업로드 없이 기존 repo 만 점검")
+    p.add_argument("--version", default=None,
+                   help="불변 버전 태그 (예: v1) — 박고 MANIFEST.yaml 에 기록. 중복이면 에러")
+    p.add_argument("--task", default=None,
+                   help="MANIFEST 태스크 키 (기본: repo 이름에서 slug 추출)")
     args = p.parse_args()
     run(args.local_dir, args.repo_id, private=args.private,
         repo_type=args.repo_type, commit_message=args.message,
-        verify_only=args.verify_only)
+        verify_only=args.verify_only, version=args.version, task=args.task)
 
 
 if __name__ == "__main__":

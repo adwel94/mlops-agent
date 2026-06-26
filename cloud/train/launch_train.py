@@ -59,16 +59,30 @@ def run(
     save_total_limit: int = 1,
     num_gpus: int = 1,
     full: bool = False,
+    task: str | None = None,
     volume: int = DEFAULT_VOLUME_GB,
     container_disk: int = DEFAULT_DISK_GB,
     image: str = DEFAULT_IMAGE,
     cloud_type: CloudType | str = CloudType.SECURE,
 ) -> str:
-    """학습 파드를 생성하고 pod_id 반환. full=True 면 llm/visual 까지 학습(A100 권장)."""
+    """학습 파드를 생성하고 pod_id 반환. full=True 면 llm/visual 까지 학습(A100 권장).
+
+    hf_dataset_repo 는 `repo` 또는 `repo@<버전태그>` 형식. 버전을 주면 그 태그를 데이터셋
+    revision 으로 받고, 모델 태그를 `<버전>-s<steps>[-full]` 로 자동 도출한다(예: v1-s3000).
+    hf_output_repo 가 있으면 런치 시 MANIFEST.yaml 에 모델 항목을 eval=null 로 기록한다.
+    """
     if isinstance(gpu, str):
         gpu = GPUType[gpu]
     if isinstance(cloud_type, str):
         cloud_type = CloudType[cloud_type]
+
+    # `repo@버전` 분리 → 데이터셋 revision + 모델 태그용 버전 토큰.
+    if "@" in hf_dataset_repo:
+        ds_repo, ds_rev = hf_dataset_repo.split("@", 1)
+    else:
+        ds_repo, ds_rev = hf_dataset_repo, ""
+    dataset_ver = ds_rev or "v0"          # 버전 미지정 = main = v0(미버전)
+    model_tag = f"{dataset_ver}-s{max_steps}" + ("-full" if full else "")
 
     env: dict[str, str] = {}
     for k in _SECRET_KEYS:
@@ -76,13 +90,16 @@ def run(
         if v:
             env[k] = v
     # flow / training params
-    env["HF_DATASET_REPO"] = hf_dataset_repo
+    env["HF_DATASET_REPO"] = ds_repo
+    if ds_rev:
+        env["HF_DATASET_REVISION"] = ds_rev
     # Force classic downloads — the Xet backend (default in huggingface_hub >=1.x)
     # stalls fetching our many-small-file dataset in pod/headless envs; classic
     # HTTP downloads progress reliably. snapshot_download reads this at runtime.
     env["HF_HUB_DISABLE_XET"] = "1"
     if hf_output_repo:
         env["HF_OUTPUT_REPO"] = hf_output_repo
+        env["HF_OUTPUT_TAG"] = model_tag
     env["MAX_STEPS"] = str(max_steps)
     env["GLOBAL_BATCH_SIZE"] = str(global_batch_size)
     env["NUM_GPUS"] = str(num_gpus)
@@ -105,6 +122,19 @@ def run(
         ports=DEFAULT_PORTS, env=env,
     )
     print(f"[launch_train] pod_id = {pod_id}  (max_steps={max_steps}, full={full}, gpu={gpu.name})")
+
+    # 런치 시점에 모델 항목을 원장에 기록(eval=null). 학습은 파드에서 비동기로 끝나므로
+    # 여기선 "시도"를 남기고, 평가 후 `manifest.py set-eval` 로 eval 을 채운다.
+    if hf_output_repo:
+        from scripts.manifest import add_model, slug_from_repo
+        add_model(
+            task or slug_from_repo(ds_repo), model_tag,
+            dataset=dataset_ver, steps=max_steps, full=full,
+            repo=hf_output_repo, tag=model_tag, eval=None,
+        )
+        print(f"[launch_train] 모델 태그 = {hf_output_repo}@{model_tag}  (평가 후: "
+              f"python scripts/manifest.py set-eval {task or slug_from_repo(ds_repo)} {model_tag} <값>)")
+
     print(_summary(pod(pod_id)))
     print(
         "\n파드가 부팅 때 스스로: bootstrap → 데이터셋 → repair → 학습 → 체크포인트 업로드 → 자가종료.\n"
@@ -123,8 +153,10 @@ def _cli() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--name", default="gr00t-train")
     p.add_argument("--gpu", default=DEFAULT_GPU.name, help="GPUType 이름 (예: NVIDIA_L40S, NVIDIA_A100_80GB_PCIE)")
-    p.add_argument("--hf-dataset-repo", default="adwel94/maniskill-threecubes-lerobot")
+    p.add_argument("--hf-dataset-repo", default="adwel94/maniskill-threecubes-lerobot",
+                   help="repo 또는 repo@<버전태그> (예: ...lerobot@v1) — 버전이 모델 태그에 들어감")
     p.add_argument("--hf-output-repo", default=None, help="체크포인트 업로드 대상 (미지정 시 업로드 skip)")
+    p.add_argument("--task", default=None, help="MANIFEST 태스크 키 (기본: dataset repo slug)")
     p.add_argument("--max-steps", type=int, default=500)
     p.add_argument("--global-batch-size", type=int, default=16)
     p.add_argument("--learning-rate", type=float, default=None)
@@ -142,7 +174,7 @@ def _cli() -> None:
         hf_output_repo=args.hf_output_repo, max_steps=args.max_steps,
         global_batch_size=args.global_batch_size, learning_rate=args.learning_rate,
         save_steps=args.save_steps, save_total_limit=args.save_total_limit,
-        num_gpus=args.num_gpus, full=args.full,
+        num_gpus=args.num_gpus, full=args.full, task=args.task,
         volume=args.volume, container_disk=args.container_disk, image=args.image,
         cloud_type=args.cloud_type)
 

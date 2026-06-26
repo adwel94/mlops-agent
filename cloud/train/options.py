@@ -56,8 +56,10 @@ class TrainingOptions(BaseModel):
 class FlowParameters(BaseModel):
     # --- 데이터/출력 repo ---
     hf_dataset_repo: str = "adwel94/maniskill-threecubes-lerobot"
+    hf_dataset_revision: str = ""        # 데이터셋 버전 태그/브랜치 (비우면 main)
     hf_output_repo: str = ""             # 비우면 체크포인트 HF 업로드 skip
-    hf_output_branch: str = "main"
+    hf_output_branch: str = "main"       # 최종 모델이 올라갈 브랜치 (main = 최신)
+    hf_output_tag: str = ""              # 이 런의 불변 태그 (예: v1-s3000) — 업로드 후 박음
 
     # --- 비밀/인프라 (env 에서) ---
     hf_token: str = ""
@@ -75,8 +77,10 @@ class FlowParameters(BaseModel):
     def from_env(cls) -> "FlowParameters":
         return cls(
             hf_dataset_repo=os.environ.get("HF_DATASET_REPO", cls.model_fields["hf_dataset_repo"].default),
+            hf_dataset_revision=os.environ.get("HF_DATASET_REVISION", ""),
             hf_output_repo=os.environ.get("HF_OUTPUT_REPO", ""),
             hf_output_branch=os.environ.get("HF_OUTPUT_BRANCH", "main"),
+            hf_output_tag=os.environ.get("HF_OUTPUT_TAG", ""),
             hf_token=os.environ.get("HF_TOKEN", ""),
             runpod_api_key=os.environ.get("RUNPOD_API_KEY", ""),
             runpod_pod_id=os.environ.get("RUNPOD_POD_ID", ""),

@@ -66,12 +66,14 @@ def load_config() -> FlowParameters:
 
 @task(name="prepare_dataset", retries=2, retry_delay_seconds=15)
 def prepare_dataset(p: FlowParameters) -> None:
-    print(f"[2/6] prepare_dataset — HF {p.hf_dataset_repo} -> {p.training.dataset_dir}")
+    rev = p.hf_dataset_revision or None
+    print(f"[2/6] prepare_dataset — HF {p.hf_dataset_repo}@{rev or 'main'} -> {p.training.dataset_dir}")
     from huggingface_hub import snapshot_download
 
     snapshot_download(
         repo_id=p.hf_dataset_repo,
         repo_type="dataset",
+        revision=rev,
         local_dir=p.training.dataset_dir,
         token=p.hf_token or None,
     )
@@ -197,9 +199,19 @@ def upload_checkpoint(p: FlowParameters) -> None:
         ],
         commit_message=f"GR00T finetune final model (max_steps={p.training.max_steps})",
     )
+    # 이 런의 불변 태그를 main(방금 올린 commit)에 박는다 — 영구 핸들(eval/serve 가 repo@tag 로 콕 집음).
+    # 모델 태그도 불변이지만, 학습은 성공했는데 태그만 충돌(같은 설정 재실행)했다고 런을 죽이진 않는다.
+    if p.hf_output_tag:
+        try:
+            api.create_tag(p.hf_output_repo, tag=p.hf_output_tag, revision=p.hf_output_branch)
+            print(f"  tagged {p.hf_output_repo}@{p.hf_output_tag}")
+        except Exception as e:
+            print(f"  [warn] 태그 '{p.hf_output_tag}' 생성 실패(이미 존재?): {e} — main 은 갱신됨")
+
     url = f"https://huggingface.co/{p.hf_output_repo}/tree/{p.hf_output_branch}"
     print(f"  uploaded -> {url}")
-    send_discord(f"✅ *[upload] 완료*\n{url}\npod=`{pod_id}`", channel=DiscordChannel.PIPELINE)
+    send_discord(f"✅ *[upload] 완료*\n{url}" + (f" (tag `{p.hf_output_tag}`)" if p.hf_output_tag else "")
+                 + f"\npod=`{pod_id}`", channel=DiscordChannel.PIPELINE)
 
 
 # ---------------------------------------------------------------------------

@@ -95,8 +95,9 @@ Python 함수 진입점:
 | `scripts.check_maniskill_env` | `run()` |
 | `scripts.ee_verify` | `run(traj_path, task=None, count=10, seed=0, sim_backend, ...)` |
 | `scripts.h5_to_lerobot` | `run(traj_path, out=None, fps=20, instruction=None, camera=None)` |
-| `scripts.hf_push_dataset` | `run(local_dir, repo_id, private=False, verify_only=False)` · `verify(repo_id)` |
+| `scripts.hf_push_dataset` | `run(local_dir, repo_id, private=False, verify_only=False, version=None, task=None)` · `verify(repo_id)` |
 | `scripts.ee_convert` *(라이브러리)* | `episode_joint_to_ee(...)`, `ee_delta_to_target_pose(...)` — ee_verify·h5_to_lerobot가 사용 |
+| `scripts.manifest` *(라이브러리)* | `add_dataset(...)`, `add_model(...)`, `set_eval(...)`, `slug_from_repo(...)` — HF 버전 원장(MANIFEST.yaml) |
 
 각 스크립트는 `if __name__ == "__main__":` 진입점에 동등한 argparse CLI가 있음.
 
@@ -133,10 +134,12 @@ maniskill/
 │   ├── _wsl_solve_wrapper.py   빌트인 task용 WSL 래퍼 (Windows에서 직접 안 돎)
 │   ├── _wsl_solve_custom.py    커스텀 task용 WSL 시드 루프 생성기
 │   ├── ee_convert.py           관절→EE 변환 수학 (델타+절대 EEF rot6d; 라이브러리, 스킬 아님)
+│   ├── manifest.py             HF 버전 원장 읽기/쓰기 (MANIFEST.yaml; 라이브러리 + show/set-eval CLI)
 │   └── _wsl_ee_verify.py       EE-델타 IK 재현 실행기 (ee_verify가 WSL에서 구동)
 ├── notebooks/          스킬별 사용 노트북 (사용법 + 파라미터 예제)
 ├── data/               생성물 (gitignore, 재생성 가능)
 │   └── datasets/<task>/
+├── MANIFEST.yaml       데이터셋·모델 HF 버전 원장 (커밋됨 — 버전 번호의 단일 출처)
 ├── CLAUDE.md           이 파일
 └── README.md           일반 소개
 ```
@@ -188,8 +191,12 @@ maniskill/
 /h5_to_lerobot <hdf5> [--instruction "..."]   # GR00T LeRobot v2.1 변환 (절대 EEF 10d + mp4 + parquet/meta)
         ↓ <hdf5 디렉토리>/lerobot/
 /hf_push_dataset <lerobot-dir> <repo_id>      # HF Hub 업로드 + 구조 검증 (학습 파드가 받을 단일 출처)
+   [--version v1]                             #   불변 버전 태그 박고 MANIFEST.yaml 에 기록 (중복이면 에러)
    [--verify-only]                            #   업로드 없이 기존 repo 점검만
-        ↓ huggingface.co/datasets/<repo_id>  → GR00T 학습 (클라우드, cloud/train/launch_train.py)
+        ↓ huggingface.co/datasets/<repo_id>@<version>  → GR00T 학습 (클라우드)
+# 학습은 데이터셋을 repo@version 으로 받고 모델 태그를 <version>-s<steps> 로 자동 도출:
+/gr00t_train --hf-dataset-repo <repo_id>@v1 --hf-output-repo <model_repo> --max-steps 30000
+        ↓ huggingface.co/<model_repo>@v1-s30000  (+ MANIFEST.yaml 에 eval=null 로 기록)
 ```
 
 `h5_add_images`의 기본 입력은 `task_to_h5` 출력(`data/datasets/<task>/motionplanning.h5`). `fetch_sample_h5` 궤적(`trajectory.h5`)을 쓰려면 `--traj-path`(또는 함수 `traj_path=...`)로 명시.
@@ -211,6 +218,24 @@ data/datasets/<task>/<source-stem>.<obs_mode>.<control_mode>.<sim_backend>.h5
 예: `trajectory.h5` 입력 → `trajectory.rgb.pd_joint_pos.physx_cpu.h5`; `motionplanning.h5` 입력 → `motionplanning.rgb.pd_joint_pos.physx_cpu.h5`. 같은 옵션으로 재실행하면 덮어씀.
 
 데이터셋의 `.json` 사이드카에는, 환경이 `label_metadata()` 를 노출하는 경우 그 **정수 라벨 → 문자열 사전**(예: `target_id → ["red","green","blue"]`)이 기록됨 — 데이터셋만으로 라벨 해독 가능.
+
+### HF 명명·버전 컨벤션 (반복 업로드가 안 꼬이게)
+
+재학습·데이터 재생성을 반복하면 repo 이름이 증식하거나(`-ft2`, `-final`) 덮어쓰기로 이전 게 사라진다. 둘 다 막는 규칙: **태스크당 repo 하나 + git 태그로 버전**. HF 는 git 이라 한 repo 에 여러 스냅샷(태그)을 공짜로 쌓는다.
+
+```
+데이터셋  adwel94/maniskill-<slug>-lerobot        # 태스크당 하나
+              └─ tag v1 (1000ep), v2 (3000ep) ...   # 에피소드/생성방식 바뀌면 새 태그(불변)
+모델      adwel94/gr00t-<slug>                      # 태스크당 하나
+              ├─ main                                 # 최신 업로드(자동); "best"는 직접 태그로 골라 씀
+              └─ tag <ds_ver>-s<steps>[-full]         # 예: v1-s3000, v2-s30000-full
+```
+
+- **로컬은 작업 사본, HF 태그가 버전 진실.** `data/` 는 gitignore + 재생성 가능 → 로컬엔 *최신 빌드 하나*만. 과거 버전은 HF 태그에서 pull. 모델은 애초에 로컬에 없음(파드→HF 직행).
+- **버전 번호의 단일 출처 = `MANIFEST.yaml`** (repo 루트, 커밋됨). "어떤 버전이 어디 있고 eval 이 얼마"를 잇는 작은 텍스트 지도. 큰 데이터는 HF, 로컬엔 최신본, 매핑은 여기 — 세 역할이 안 겹친다.
+- **태그는 불변.** `hf_push_dataset --version v1` 은 같은 태그가 이미 있으면 **에러**(데이터가 바뀌었으면 새 번호를 쓰라는 신호 — 덮어쓰지 않음). 모델 태그 충돌은 파드에서 경고만(학습 성공을 태그 때문에 죽이지 않음; main 은 갱신됨).
+- **자동 기록**: `hf_push_dataset --version` → `add_dataset`(업로드+태그 성공 직후). `launch_train` → `add_model`(런치 시 `eval=null`). 모델 eval 은 평가 후 수동: `python scripts/manifest.py set-eval <slug> <model> <값>`.
+- **slug** = dataset repo 이름에서 추출(`maniskill-<slug>-lerobot` → `<slug>`). push/train 양쪽이 같은 dataset repo 를 알아 MANIFEST 태스크 키가 일치한다.
 
 GR00T용 LeRobot 출력 (④, 디렉토리):
 ```
