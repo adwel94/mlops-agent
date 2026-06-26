@@ -5,7 +5,7 @@
 [3/6] repair_metadata    — GR00T repair_lerobot_metadata (stats/relative_stats 재생성)
 [4/6] train              — uv run _gr00t_train.py (gr00t venv 서브프로세스; Discord 콜백 주입)
 [5/6] upload_checkpoint  — 최종 모델(run-root, 체크포인트 제외) → HF (hf_output_repo 있을 때)
-[6/6] self_terminate     — RunPod REST DELETE (finally, 100회 재시도)
+[6/6] request_termination — 외부 Cloudflare Worker(cloud/reaper)에 3초마다 종료요청 (finally; Worker가 실제 DELETE)
 
 이 flow 는 시스템 python(prefect/wandb/hf/requests)에서 돌고, 무거운 학습만 gr00t
 uv venv 서브프로세스로 분리해 의존성 충돌을 피한다. 모니터링: Prefect(상태) +
@@ -195,13 +195,47 @@ def upload_checkpoint(p: FlowParameters) -> None:
 
 
 # ---------------------------------------------------------------------------
-# [6/6] self_terminate
+# [6/6] request_termination (외부 Worker 가 실제 삭제)
 # ---------------------------------------------------------------------------
 
-@task(name="self_terminate", retries=0)
-def self_terminate(p: FlowParameters) -> None:
+@task(name="request_termination", retries=0)
+def request_termination(p: FlowParameters) -> None:
+    """파드는 자기를 RunPod API로 죽이지 않는다 (파드→RunPod 호출은 랜덤 403 — 데이터센터
+    공유 egress IP가 RunPod 자체 WAF/레이트리밋에 걸림). 대신 외부 Cloudflare Worker
+    (cloud/reaper)에게 '죽여줘'를 3초마다 보내고, 실제 DELETE는 RunPod 밖에서 100% 도는
+    Worker가 한다. **살아있다는 것 자체가 '아직 안 죽음'의 증거**이므로, 삭제되어 프로세스가
+    소멸할 때까지 반복한다. 2번째 시도부터(이후 ~30초마다) RunPod 채널로도 직접 plain 알림
+    → Worker가 죽어 있어도 사람이 알고 로컬 runpod_down 으로 수동 종료할 수 있다.
+
+    WORKER_TERMINATE_URL 미설정 시 옛 방식(직접 DELETE)으로 폴백 — Worker 가동을 검증하기
+    전까지 보호 공백을 만들지 않기 위함. Worker 확인 후 이 폴백은 제거한다.
+    """
+    pod_id = p.runpod_pod_id
+    if not pod_id:
+        print("  RUNPOD_POD_ID 없음 — skip")
+        return
+    worker_url = os.environ.get("WORKER_TERMINATE_URL")
+    secret = os.environ.get("POD_PING_SECRET")
+    if not worker_url:
+        print("[6/6] request_termination — WORKER_TERMINATE_URL 미설정 → 직접 DELETE 폴백")
+        return _direct_delete_fallback(p)
+    print(f"[6/6] request_termination — pod={pod_id} via Worker (3초마다, 죽을 때까지)")
+    attempt = 0
+    while True:  # 파드가 실제로 삭제되면 프로세스가 죽어 루프가 자연 종료된다
+        attempt += 1
+        try:
+            requests.post(worker_url, json={"pod_id": pod_id, "secret": secret, "attempt": attempt}, timeout=15)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [{attempt}] worker ping failed: {e}")
+        if attempt == 2 or (attempt > 2 and attempt % 10 == 0):  # 2번째, 이후 ~30초마다
+            send_discord(f"⏳ 아직 종료 안 됨 — `{pod_id}` (시도 #{attempt}) — Worker 가 삭제 시도 중",
+                         channel=DiscordChannel.RUNPOD)
+        time.sleep(3)
+
+
+def _direct_delete_fallback(p: FlowParameters) -> None:
+    """폴백 전용: Worker 미설정 시에만 파드가 직접 RunPod DELETE (랜덤 403 가능 — 그래서 Worker 로 대체 예정)."""
     pod_id, api_key = p.runpod_pod_id, p.runpod_api_key
-    print(f"[6/6] self_terminate — pod={pod_id}")
     if not pod_id or not api_key:
         print("  RUNPOD_POD_ID/API_KEY 없음 — skip")
         return
@@ -209,17 +243,17 @@ def self_terminate(p: FlowParameters) -> None:
         try:
             resp = requests.delete(
                 f"https://rest.runpod.io/v1/pods/{pod_id}",
-                headers={"Authorization": f"Bearer {api_key}"}, timeout=30,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, timeout=30,
             )
             resp.raise_for_status()
-            send_discord(f"🗑️ Pod 자가종료 성공 [{attempt}] — `{pod_id}`", channel=DiscordChannel.RUNPOD)
+            send_discord(f"🗑️ Pod 직접삭제 성공 [{attempt}] — `{pod_id}`", channel=DiscordChannel.RUNPOD)
             print(f"  deleted (attempt {attempt})")
             time.sleep(30)
             return
         except Exception as e:  # noqa: BLE001
             print(f"  [{attempt}] delete failed: {e}")
             time.sleep(30)
-    send_discord(f"🚨 Pod 자가종료 100회 실패! 수동 확인 — `{pod_id}`", channel=DiscordChannel.RUNPOD)
+    send_discord(f"🚨 Pod 직접삭제 100회 실패! 수동 확인 — `{pod_id}`", channel=DiscordChannel.RUNPOD)
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +295,7 @@ def train_flow():
         raise
     finally:
         if p:
-            self_terminate(p)
+            request_termination(p)
 
 
 if __name__ == "__main__":

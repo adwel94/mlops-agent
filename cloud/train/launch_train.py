@@ -27,8 +27,8 @@ load_env()
 
 DEFAULT_IMAGE = "adwel94/maniskill-gr00t-train:latest"
 DEFAULT_GPU = GPUType.NVIDIA_L40S          # head-only 학습엔 충분; --full 은 A100 권장
-DEFAULT_VOLUME_GB = 80                     # 모델+데이터셋+outputs/checkpoints
-DEFAULT_DISK_GB = 40
+DEFAULT_VOLUME_GB = 250                    # 모델 캐시(~17GB) + 3B 체크포인트(~29GB) 여유 충분 (넉넉하게)
+DEFAULT_DISK_GB = 80                        # venv(torch/gr00t/flash-attn ~15GB) + 시스템 여유
 DEFAULT_PORTS = ["8888/http", "22/tcp"]    # 서빙 아님 → 5555 불필요
 
 # .env → 파드로 그대로 넘길 비밀/인프라 키 (값 있을 때만).
@@ -37,6 +37,8 @@ _SECRET_KEYS = (
     "WANDB_API_KEY", "WANDB_PROJECT", "WANDB_ENTITY",
     "PREFECT_API_URL", "PREFECT_API_KEY",
     "RUNPOD_WEBHOOK_URL", "PIPELINE_WEBHOOK_URL", "STDOUT_WEBHOOK_URL",
+    # 외부 종료 Worker(cloud/reaper) — 파드가 자기 삭제를 RunPod 대신 여기로 요청
+    "WORKER_TERMINATE_URL", "POD_PING_SECRET",
 )
 # DISCORD_BOT_TOKEN 은 파드로 보내지 않는다 — 채널을 *읽는* 건 로컬(read_logs.py)뿐.
 
@@ -54,6 +56,7 @@ def run(
     global_batch_size: int = 16,
     learning_rate: float | None = None,
     save_steps: int | None = None,
+    save_total_limit: int = 1,
     num_gpus: int = 1,
     full: bool = False,
     volume: int = DEFAULT_VOLUME_GB,
@@ -74,6 +77,10 @@ def run(
             env[k] = v
     # flow / training params
     env["HF_DATASET_REPO"] = hf_dataset_repo
+    # Force classic downloads — the Xet backend (default in huggingface_hub >=1.x)
+    # stalls fetching our many-small-file dataset in pod/headless envs; classic
+    # HTTP downloads progress reliably. snapshot_download reads this at runtime.
+    env["HF_HUB_DISABLE_XET"] = "1"
     if hf_output_repo:
         env["HF_OUTPUT_REPO"] = hf_output_repo
     env["MAX_STEPS"] = str(max_steps)
@@ -85,6 +92,9 @@ def run(
         env["LEARNING_RATE"] = str(learning_rate)
     if save_steps is not None:
         env["SAVE_STEPS"] = str(save_steps)
+    # 체크포인트는 resume 용으로 유지하되 누적은 막는다 — 최신 N개만 (기본 1).
+    # 3B 체크포인트가 ~29GB라 2개+ 쌓이면 볼륨이 터진다(저장 시 임시 2개 피크).
+    env["SAVE_TOTAL_LIMIT"] = str(save_total_limit)
     if full:
         env["TUNE_LLM"] = "true"
         env["TUNE_VISUAL"] = "true"
@@ -119,6 +129,8 @@ def _cli() -> None:
     p.add_argument("--global-batch-size", type=int, default=16)
     p.add_argument("--learning-rate", type=float, default=None)
     p.add_argument("--save-steps", type=int, default=None)
+    p.add_argument("--save-total-limit", type=int, default=1,
+                   help="유지할 체크포인트 수 (기본 1=최신만; 누적 방지)")
     p.add_argument("--num-gpus", type=int, default=1)
     p.add_argument("--full", action="store_true", help="llm+visual 까지 전체 학습 (A100 80GB 권장)")
     p.add_argument("--volume", type=int, default=DEFAULT_VOLUME_GB)
@@ -129,7 +141,8 @@ def _cli() -> None:
     run(name=args.name, gpu=args.gpu, hf_dataset_repo=args.hf_dataset_repo,
         hf_output_repo=args.hf_output_repo, max_steps=args.max_steps,
         global_batch_size=args.global_batch_size, learning_rate=args.learning_rate,
-        save_steps=args.save_steps, num_gpus=args.num_gpus, full=args.full,
+        save_steps=args.save_steps, save_total_limit=args.save_total_limit,
+        num_gpus=args.num_gpus, full=args.full,
         volume=args.volume, container_disk=args.container_disk, image=args.image,
         cloud_type=args.cloud_type)
 

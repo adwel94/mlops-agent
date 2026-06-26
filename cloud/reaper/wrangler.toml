@@ -1,0 +1,18 @@
+name = "runpod-reaper"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# 15분마다 stale-pod 스캔 (기능 1)
+[triggers]
+crons = ["*/15 * * * *"]
+
+# 비밀 아님 — wrangler.toml 에 그대로 둠 (시크릿은 `wrangler secret put`)
+[vars]
+CHANNEL_ID = "1472932104344965309"
+MAX_AGE_HOURS = "1"
+
+# 시크릿 (커밋 금지 — 아래 명령으로 등록):
+#   wrangler secret put RUNPOD_API_KEY
+#   wrangler secret put DISCORD_BOT_TOKEN
+#   wrangler secret put DISCORD_PUBLIC_KEY     # Discord 앱 General Information 의 Public Key
+#   wrangler secret put POD_PING_SECRET        # 아무 랜덤 문자열 (.env 의 POD_PING_SECRET 과 동일)
