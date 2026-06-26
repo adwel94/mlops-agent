@@ -1,7 +1,7 @@
 """Pydantic 설정 모델 (GR00T 학습 파이프라인).
 
 컨트롤러(launch_train.py)에서 Pydantic → flat env vars 로 파드에 주입하고,
-파드 안에서는 env vars → Pydantic 으로 복원한다 (safari_vlm_train options.py 패턴).
+파드 안에서는 env vars → Pydantic 으로 복원한다.
 
 필드명 ↔ env 키: 대문자 (예: max_steps → MAX_STEPS, tune_llm → TUNE_LLM).
 TrainingOptions 필드는 GR00T FinetuneConfig 와 1:1 (gr00t/configs/finetune_config.py).

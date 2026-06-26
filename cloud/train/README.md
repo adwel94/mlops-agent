@@ -2,7 +2,7 @@
 
 새 임베디먼트(우리 Panda+EEF)는 베이스 GR00T 로는 못 쓴다 — `new_embodiment` head 가
 파인튜닝으로만 생기기 때문(`gr00t_policy.py`가 base 모델 거부). 이 번들이 그 파인튜닝을
-**Prefect flow** 로 자급식 수행한다(safari_vlm_train 패턴을 GR00T 에 이식).
+**Prefect flow** 로 자급식 수행한다.
 
 서빙(`cloud/runpod`)과 **분리된 학습 전용 이미지**. 파드가 부팅 때 스스로:
 bootstrap → 데이터셋(HF) → repair → 학습 → 체크포인트 업로드(HF) → **self_terminate**.

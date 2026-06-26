@@ -8,7 +8,6 @@ from enum import Enum
 from typing import Union
 
 class DiscordChannel(Enum):
-    SAFARI = "safari"        # 구 프로젝트 전용 (GR00T 미사용)
     RUNPOD = "runpod"        # 파드/인프라/과금 (생성·자가종료·종료실패 경보)
     PIPELINE = "pipeline"    # 학습 파이프라인 (시작·진행·완료·업로드·실패)
     STDOUT = "stdout"        # 파드 raw stdout 스트림 (에이전트가 봇 토큰으로 읽음)

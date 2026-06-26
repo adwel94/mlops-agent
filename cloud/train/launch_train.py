@@ -1,4 +1,4 @@
-"""GR00T 학습 파드 컨트롤러 (safari 컨트롤러 역할).
+"""GR00T 학습 파드 컨트롤러.
 
 설정/비밀을 flat env vars 로 만들어 학습 이미지 파드를 띄운다. 파드 entrypoint 가
 부팅 때 bootstrap → Prefect flow(prepare→repair→train→upload→self_terminate)를 자급 실행.
