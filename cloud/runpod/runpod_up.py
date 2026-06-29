@@ -68,9 +68,10 @@ def _build_env(
     if hf_model_subdir:
         env["HF_MODEL_SUBDIR"] = hf_model_subdir
     # 비밀: 셸/.env 에 있으면 전달.
-    #   HF_TOKEN           — private HF repo·gated 모델 다운로드
-    #   STDOUT_WEBHOOK_URL — stdout 시퍼가 Discord STDOUT 채널로 로그 전송(원격 디버깅)
-    for k in ("HF_TOKEN", "STDOUT_WEBHOOK_URL"):
+    #   HF_TOKEN                — private HF repo·gated 모델 다운로드
+    #   STDOUT_WEBHOOK_URL      — stdout 시퍼가 Discord STDOUT 채널로 로그 전송(원격 디버깅)
+    #   BOOT_TIMING_WEBHOOK_URL — bootstrap 완료 시 BOOT_PROFILE 계측 한 줄(파싱용) 전송
+    for k in ("HF_TOKEN", "STDOUT_WEBHOOK_URL", "BOOT_TIMING_WEBHOOK_URL"):
         v = os.getenv(k)
         if v:
             env[k] = v

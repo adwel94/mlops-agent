@@ -47,6 +47,7 @@ def run(
     action_steps: int = 16,
     instruction: str | None = None,
     sim_backend: str = "cpu",
+    log_jsonl: str | Path | None = None,
     verbose: bool = False,
 ) -> dict:
     """Roll out the GR00T policy served at server_host:server_port over a sample of
@@ -69,6 +70,11 @@ def run(
         meta = json.loads(traj_path.with_suffix(".json").read_text())
         task = meta["env_info"]["env_id"]
 
+    # per-episode diagnostics default next to the dataset (any-pick / color / ik fails)
+    if log_jsonl is None:
+        log_jsonl = traj_path.parent / (traj_path.stem + ".eval_diag.jsonl")
+    log_jsonl = Path(log_jsonl)
+
     inner = [
         f"export VK_ICD_FILENAMES={WSL_VK_ICD};", f'"{WSL_PYTHON}"',
         f'"{_win_to_wsl(WSL_SCRIPT)}"',
@@ -81,6 +87,7 @@ def run(
         "--max-steps", str(max_steps),
         "--action-steps", str(action_steps),
         "--sim-backend", sim_backend,
+        "--log-jsonl", f'"{_win_to_wsl(log_jsonl)}"',
     ]
     if instruction:
         inner += ["--instruction", f'"{instruction}"']
@@ -109,6 +116,8 @@ def run(
         )
     line = m.group(1).strip()
     print("[gr00t_eval] " + line.encode("ascii", "ignore").decode())
+    if log_jsonl.exists():
+        print(f"[gr00t_eval] per-episode diagnostics: {log_jsonl}")
     return dict(re.findall(r"(\w+)=(\S+)", line))
 
 
@@ -130,12 +139,14 @@ def _cli() -> None:
     p.add_argument("--instruction", default=None,
                    help="template over label_metadata keys, e.g. \"pick up the {target_id} cube\"")
     p.add_argument("--sim-backend", default="cpu")
+    p.add_argument("--log-jsonl", default=None,
+                   help="per-episode diagnostics output (default: <dataset>.eval_diag.jsonl)")
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args()
     run(args.traj_path, server_host=args.server_host, server_port=args.server_port,
         task=args.task, count=args.count, seed=args.seed, max_steps=args.max_steps,
         action_steps=args.action_steps, instruction=args.instruction,
-        sim_backend=args.sim_backend, verbose=args.verbose)
+        sim_backend=args.sim_backend, log_jsonl=args.log_jsonl, verbose=args.verbose)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,13 @@ export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 
 cd "${GR00T_DIR}"
 
+# torch 의 첫 CUDA init 이 간헐적으로 깨짐("CUDA unknown error" → devices=0, nvidia-smi 는
+# 정상). torch 가 그 "0 디바이스"를 프로세스 내에 캐싱하므로 같은 프로세스 재시도는 무의미 →
+# 매번 새 프로세스로 재기동한다. 정상 기동하면 서버가 블로킹(반환 X)이라 루프가 거기서 멈춰
+# 대기하고, 크래시로 반환되면 다음 시도로 넘어간다.
+SERVE_RETRIES="${SERVE_RETRIES:-4}"
+SERVE_RETRY_SLEEP="${SERVE_RETRY_SLEEP:-10}"
+
 if [ "${SERVE_BASE:-0}" = "1" ]; then
     # 베이스 모델: modality config 등록 + 데이터셋 stats 로 정규화.
     MODEL_PATH="${MODEL_PATH:-nvidia/GR00T-N1.7-3B}"
@@ -35,18 +42,28 @@ if [ "${SERVE_BASE:-0}" = "1" ]; then
     uv run python scripts/repair_lerobot_metadata.py "${DATASET_DIR}" \
         --embodiment-tag "${EMBODIMENT_TAG}" || echo "    (repair 실패 — 기존 stats 로 진행)"
     echo "==> serving BASE model ${MODEL_PATH}  (config=${CONFIG_PATH}, stats from ${DATASET_DIR})"
-    exec uv run python gr00t/eval/run_gr00t_server.py \
-        --model-path "${MODEL_PATH}" \
-        --embodiment-tag "${EMBODIMENT_TAG}" \
-        --modality-config-path "${CONFIG_PATH}" \
-        --dataset-path "${DATASET_DIR}" \
-        --host "${HOST}" --port "${PORT}"
+    SERVE_ARGS=(--model-path "${MODEL_PATH}" --embodiment-tag "${EMBODIMENT_TAG}" \
+                --modality-config-path "${CONFIG_PATH}" --dataset-path "${DATASET_DIR}" \
+                --host "${HOST}" --port "${PORT}")
 else
     # 파인튜닝 체크포인트: modality config + stats 가 체크포인트에 포함됨.
     : "${MODEL_PATH:?set MODEL_PATH=/workspace/outputs/<run>/checkpoint-XXXX}"
     echo "==> serving FINETUNED checkpoint ${MODEL_PATH}"
-    exec uv run python gr00t/eval/run_gr00t_server.py \
-        --model-path "${MODEL_PATH}" \
-        --embodiment-tag "${EMBODIMENT_TAG}" \
-        --host "${HOST}" --port "${PORT}"
+    SERVE_ARGS=(--model-path "${MODEL_PATH}" --embodiment-tag "${EMBODIMENT_TAG}" \
+                --host "${HOST}" --port "${PORT}")
 fi
+
+attempt=1
+while [ "${attempt}" -le "${SERVE_RETRIES}" ]; do
+    echo "==> serve attempt ${attempt}/${SERVE_RETRIES}"
+    set +e
+    uv run python gr00t/eval/run_gr00t_server.py "${SERVE_ARGS[@]}"
+    rc=$?
+    set -e
+    [ "${rc}" -eq 0 ] && exit 0   # (정상 시 서버는 블로킹 — 여기 도달 안 함)
+    echo "==> serve attempt ${attempt} 실패 (exit ${rc}) — ${SERVE_RETRY_SLEEP}s 후 재시도"
+    attempt=$((attempt + 1))
+    sleep "${SERVE_RETRY_SLEEP}"
+done
+echo "==> serve ${SERVE_RETRIES}회 모두 실패 — 포기"
+exit 1

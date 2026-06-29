@@ -37,6 +37,7 @@ _SECRET_KEYS = (
     "WANDB_API_KEY", "WANDB_PROJECT", "WANDB_ENTITY",
     "PREFECT_API_URL", "PREFECT_API_KEY",
     "RUNPOD_WEBHOOK_URL", "PIPELINE_WEBHOOK_URL", "STDOUT_WEBHOOK_URL",
+    "BOOT_TIMING_WEBHOOK_URL",   # bootstrap 완료 시 BOOT_PROFILE 계측 한 줄 (파싱용)
     # 외부 종료 Worker(cloud/reaper) — 파드가 자기 삭제를 RunPod 대신 여기로 요청
     "WORKER_TERMINATE_URL", "POD_PING_SECRET",
 )

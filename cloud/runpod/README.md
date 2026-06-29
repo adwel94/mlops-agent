@@ -14,11 +14,11 @@ uv sync: torch/flash-attn)과 apt 패키지는 이미지에 `RUN` 으로 굽지 
 
 | 파일 | 역할 |
 |---|---|
-| `../../Dockerfile` (프로젝트 루트) | thin 이미지 — 베이스 + `/app` 에 cloud/runpod COPY + ENTRYPOINT=pod_start.sh |
+| `Dockerfile` | thin 이미지 — RunPod 베이스 + `/app` 에 cloud/runpod COPY + ENTRYPOINT=pod_start.sh |
 | `runpod_client.py` | RunPod REST API 클라이언트 (pod 생성/조회/삭제) |
 | `runpod_up.py` / `runpod_ls.py` / `runpod_down.py` | 파드 운영 스킬 (`/runpod_up` 생성 · `/runpod_ls` 목록+비용 · `/runpod_down` 종료, 삭제 전 확인) |
 | `pod_start.sh` | **ENTRYPOINT** — 부팅 시 자급식: ssh/jupyter→bootstrap→fetch_dataset→MODE 분기(serve/smoke/idle) |
-| `bootstrap.sh` | 환경 셋업(부팅 시) — uv sync, ffmpeg, git-lfs, Isaac-GR00T clone (멱등) |
+| `bootstrap.sh` | 환경 셋업(부팅 시) — uv sync, ffmpeg, git-lfs, Isaac-GR00T clone (멱등) + BOOT_PROFILE 계측 emit |
 | `fetch_dataset.sh` | HF Hub 에서 LeRobot 데이터셋 다운로드 → `/workspace/lerobot` (`HF_DATASET` env) |
 | `new_embodiment_config.py` | GR00T NEW_EMBODIMENT modality config (우리 `modality.json` 과 1:1) |
 | `smoke_test.sh` | ① 로드+스모크 — `repair_lerobot_metadata` → `launch_finetune --max-steps 2` |
@@ -27,12 +27,13 @@ uv sync: torch/flash-attn)과 apt 패키지는 이미지에 `RUN` 으로 굽지 
 ## 이미지 빌드/푸시 (1회 또는 스크립트 변경 시)
 
 ```
-docker build -t adwel94/maniskill-gr00t:0.2 -t adwel94/maniskill-gr00t:latest .
-docker push adwel94/maniskill-gr00t:0.2
+docker build -f cloud/runpod/Dockerfile -t adwel94/maniskill-gr00t:0.3 -t adwel94/maniskill-gr00t:latest .
+docker push adwel94/maniskill-gr00t:0.3
 docker push adwel94/maniskill-gr00t:latest
 ```
 프로젝트 루트에서 실행(빌드 컨텍스트). 베이스 레이어는 Docker Hub 에 이미 있어 push 시
 **작은 스크립트 레이어만** 올라감. cloud/runpod 스크립트를 고치면 재빌드+푸시.
+(무거운 GR00T venv 는 굽지 않고 부팅 때 설치 — GPU 있는 RunPod 환경에서 flash-attn arch 정확.)
 
 ## 흐름 (자급식 — SSH 불필요)
 

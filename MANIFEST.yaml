@@ -26,5 +26,5 @@ threecubes:
       full: false
       repo: adwel94/gr00t-threecubes
       tag: v1-s20000
-      eval: null
+      eval: 0.18
       date: '2026-06-26'

@@ -41,8 +41,8 @@ prefect(오케스트레이션)는 **시스템 python**, GR00T 학습은 **gr00t 
 ## 빌드/푸시
 
 ```
-docker build -f cloud/train/Dockerfile -t adwel94/maniskill-gr00t-train:0.1 -t adwel94/maniskill-gr00t-train:latest .
-docker push adwel94/maniskill-gr00t-train:0.1 && docker push adwel94/maniskill-gr00t-train:latest
+docker build -f cloud/train/Dockerfile -t adwel94/maniskill-gr00t-train:0.2 -t adwel94/maniskill-gr00t-train:latest .
+docker push adwel94/maniskill-gr00t-train:0.2 && docker push adwel94/maniskill-gr00t-train:latest
 ```
 
 ## 실행

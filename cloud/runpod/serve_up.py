@@ -30,8 +30,9 @@ sys.path.insert(0, _HERE)
 from runpod_client import CloudType, GPUType  # noqa: E402
 from runpod_up import DEFAULT_IMAGE, run as _up  # noqa: E402
 
-# 서빙 기본값 — 3B 로드(+여유)면 24GB 로 충분. A5000($0.27/hr 급)이 검증된 최저가.
-DEFAULT_GPU = GPUType.NVIDIA_RTX_A5000     # 24GB
+# 서빙 기본값 — L40S(48GB) 라인이 기본. A5000/커뮤니티 풀은 부팅 stall·불량 인스턴스가
+# 잦아(40분 stall, CUDA unknown error 사례) 신뢰 못함 → L40S 가 검증된 안정 라인.
+DEFAULT_GPU = GPUType.NVIDIA_L40S          # 48GB
 DEFAULT_VOLUME_GB = 40                     # HF 모델(~12GB) + 캐시
 DEFAULT_DISK_GB = 40
 # 8888=jupyter(디버그), 22=ssh(디버그), 5555=정책 서버(평가 롤아웃이 쓰는 단 하나).
@@ -75,7 +76,7 @@ def _cli() -> None:
     p.add_argument("hf_model", help="서빙할 파인튜닝 모델 HF repo id (예: adwel94/gr00t-threecubes-ft)")
     p.add_argument("--name", default="gr00t-serve")
     p.add_argument("--gpu", default=DEFAULT_GPU.name,
-                   help="GPUType 이름 (기본 NVIDIA_RTX_A5000=24GB)")
+                   help="GPUType 이름 (기본 NVIDIA_L40S=48GB)")
     p.add_argument("--hf-model-subdir", default=None,
                    help="repo 내 체크포인트 서브폴더 (구 레이아웃 호환; 보통 불필요)")
     p.add_argument("--volume", type=int, default=DEFAULT_VOLUME_GB)

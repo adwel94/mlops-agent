@@ -1,11 +1,12 @@
 # GR00T 학습 전용 thin 이미지 (서빙 cloud/runpod 와 분리).
 #
 # 서빙 이미지와 동일 철학: 무거운 의존성(GR00T uv sync, prefect 등)은 RUN 으로 굽지 않고
-# ENTRYPOINT(entrypoint.sh)에서 부팅 시 설치. 여기선 가벼운 스크립트만 COPY.
+# ENTRYPOINT(entrypoint.sh)에서 부팅 시 설치(= GPU 있는 RunPod 환경 → flash-attn arch 정확).
+# 여기선 가벼운 스크립트만 COPY.
 #
 # 빌드/푸시 (프로젝트 루트에서, -f 로 이 파일 지정):
-#   docker build -f cloud/train/Dockerfile -t adwel94/maniskill-gr00t-train:0.1 -t adwel94/maniskill-gr00t-train:latest .
-#   docker push adwel94/maniskill-gr00t-train:0.1 && docker push adwel94/maniskill-gr00t-train:latest
+#   docker build -f cloud/train/Dockerfile -t adwel94/maniskill-gr00t-train:0.2 -t adwel94/maniskill-gr00t-train:latest .
+#   docker push adwel94/maniskill-gr00t-train:0.2 && docker push adwel94/maniskill-gr00t-train:latest
 # 실행: python cloud/train/launch_train.py  (env 주입 → 파드가 부팅 때 학습 자급)
 
 FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
