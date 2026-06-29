@@ -241,7 +241,7 @@ def run(
         "total_episodes": total_episodes,
         "total_frames": total_frames,
         "total_tasks": len(tasks),
-        "total_videos": total_episodes,
+        "total_videos": total_episodes * len(cams),   # one video file per (episode, camera)
         "total_chunks": 1,
         "chunks_size": CHUNK_SIZE,
         "fps": fps,

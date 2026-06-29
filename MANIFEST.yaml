@@ -11,6 +11,13 @@ threecubes:
       repo: adwel94/maniskill-threecubes-lerobot
       tag: v1
       date: '2026-06-19'
+    v2:
+      episodes: 1000
+      repo: adwel94/maniskill-threecubes-lerobot
+      tag: v2
+      date: '2026-06-30'
+      note: wrist-cam (panda_wristcam) — 2-camera [base_camera, hand_camera]; same 1000
+        trajectories as v1, regenerated with the wrist hand_camera added (reaching-precision fix)
   models:
     v1-s3000:
       dataset: v1
