@@ -31,7 +31,7 @@ from tqdm import tqdm
 
 from scripts.ee_convert import episode_to_abs_eef, rot6d_to_quat
 from scripts.ik_exec import np1, make_env_and_solver, solve_to_arm
-from scripts.h5_to_lerobot import BASE_CAMERA  # single source for the camera contract
+from scripts.h5_to_lerobot import select_cameras  # single source for the camera contract
 
 
 # ---- minimal GR00T PolicyClient (get_action / ping path only) ---------------
@@ -100,14 +100,19 @@ def _instruction(ep, label_md, template, fallback):
     return fallback
 
 
-def _build_obs(obs, cam, instr):
-    """sim obs -> GR00T observation dict (batch=1, time=1)."""
-    rgb = _b0(obs["sensor_data"][cam]["rgb"]).astype(np.uint8)     # (H,W,3)
+def _build_obs(obs, cams, instr):
+    """sim obs -> GR00T observation dict (batch=1, time=1).
+
+    Sends every camera the model expects (cams, discovered from the env's sensors via
+    select_cameras). 1-cam models get {base_camera}; 2-cam models get both — same code.
+    """
+    video = {c: _b0(obs["sensor_data"][c]["rgb"]).astype(np.uint8)[None, None]
+             for c in cams}                                        # each (1,1,H,W,3) uint8
     qpos = _b0(obs["agent"]["qpos"]).astype(np.float32)            # (Q,)
     tcp = _b0(obs["extra"]["tcp_pose"]).astype(np.float64)         # (7,)
     eef = episode_to_abs_eef(tcp[None])[0].astype(np.float32)      # (9,)
     return {
-        "video": {cam: rgb[None, None]},                           # (1,1,H,W,3) uint8
+        "video": video,
         "state": {"qpos": qpos[None, None], "eef": eef[None, None]},  # (1,1,*)
         # 언어 키는 모달리티 설정(new_embodiment_config.py)의 language modality_keys 와
         # 일치해야 함 = "annotation.human.task_description" (학습 때 쓴 키). shape (B,1).
@@ -151,30 +156,34 @@ def main():
 
     sidecar = json.load(open(args.traj_path.replace(".h5", ".json")))
     eps_meta = sidecar.get("episodes", [])
-    env_id = sidecar.get("env_info", {}).get("env_id", args.task)
+    env_info = sidecar.get("env_info", {})
+    env_id = env_info.get("env_id", args.task)
     label_md = sidecar.get("label_metadata") or {}
     colors = label_md.get("target_id")                 # ["red","green","blue"] or None
+    # robot_uids = the agent the dataset was generated/trained with (e.g. panda_wristcam
+    # for a wrist-cam dataset). Recorded in the sidecar; defaults to panda for old 1-cam
+    # datasets so the eval env's camera set matches what the model was trained on.
+    robot_uids = env_info.get("robot_uids", "panda")
 
     client = PolicyClient(args.server_host, args.server_port)
     client.ping()   # fail fast if the server is unreachable
 
     env, base, solver, base_p, base_q = make_env_and_solver(
-        args.task, sim_backend=args.sim_backend, obs_mode="rgb",
+        args.task, sim_backend=args.sim_backend, obs_mode="rgb", robot_uids=robot_uids,
     )
     # success = grasped AND lifted clear of table; mirror the env's own threshold
     # (cube_half_size + 0.04) so the any-cube probe matches evaluate()'s logic.
     lift_thresh = float(getattr(base, "cube_half_size", 0.02)) + 0.04
     obs0, _ = env.reset(seed=0)
-    # select the policy's camera by NAME (the embodiment contract), not by position.
-    # must match what h5_to_lerobot fed the model (observation.images.<BASE_CAMERA>).
-    available = list(obs0["sensor_data"].keys())
-    if BASE_CAMERA not in available:
-        raise SystemExit(
-            f"camera {BASE_CAMERA!r} not found in env sensors {available}. "
-            f"The trained model expects {BASE_CAMERA!r}; make the env's primary "
-            f"camera {BASE_CAMERA!r} (see new_embodiment_config)."
-        )
-    cam = BASE_CAMERA
+    # select the policy's cameras by NAME (the embodiment contract), not by position.
+    # discover all rgb cameras the env declares (base_camera first) — must match what
+    # h5_to_lerobot fed the model. 1-cam env -> [base_camera]; wrist-cam env -> +hand_camera.
+    available = [c for c in obs0["sensor_data"]
+                 if "rgb" in obs0["sensor_data"][c]]
+    try:
+        cams = select_cameras(available)
+    except ValueError as e:
+        raise SystemExit(str(e))
 
     f = h5py.File(args.traj_path, "r")
     keys = sorted(f.keys(), key=lambda k: int(k.split("_")[1]))
@@ -210,7 +219,7 @@ def main():
         ep_ik_fails = 0
         t = 0
         while t < budget and not success:
-            action = client.get_action(_build_obs(obs, cam, instr))
+            action = client.get_action(_build_obs(obs, cams, instr))
             eef = np.asarray(action["eef"])[0]          # (H,9) absolute xyz+rot6d
             grip = np.asarray(action["gripper"])[0]     # (H,1)
             horizon = min(args.action_steps, eef.shape[0])

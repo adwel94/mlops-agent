@@ -62,16 +62,20 @@ def pick_ik(qsol, ref7):
     return arr[j, :7]
 
 
-def make_env_and_solver(task, sim_backend="cpu", obs_mode="none"):
+def make_env_and_solver(task, sim_backend="cpu", obs_mode="none", robot_uids="panda"):
     """Build the env + Panda IK solver. Returns (env, base, solver, base_p, base_q).
 
     base_p/base_q = robot base pose in world (constant; the IK goal is expressed
     relative to it via world_to_base).
+
+    robot_uids selects the agent: "panda" (default, 1-cam) or "panda_wristcam" (adds a
+    hand_camera). Same arm kinematics either way, so the mplib IK solver (built from the
+    agent's URDF) is unaffected; only the sensor set changes.
     """
     env = gym.make(
         task, obs_mode=obs_mode, control_mode="pd_joint_pos",
         render_mode="rgb_array", sim_backend=sim_backend,
-        render_backend="cpu", reward_mode="none",
+        render_backend="cpu", reward_mode="none", robot_uids=robot_uids,
     )
     base = env.unwrapped
     env.reset(seed=0)

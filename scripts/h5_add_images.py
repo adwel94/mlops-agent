@@ -28,9 +28,18 @@ from pathlib import Path
 
 import gymnasium as gym
 
+# Opt-in robot override for replay (e.g. "panda_wristcam" adds a hand_camera). None =
+# keep whatever the source trajectory used (the default 1-cam panda). Set in run().
+_REPLAY_ROBOT_UIDS: str | None = None
+
 _orig_make = gym.make
 def _patched_make(env_id, *args, **kwargs):
     kwargs.setdefault("render_backend", "cpu")
+    if _REPLAY_ROBOT_UIDS is not None:
+        # inject into replay_trajectory's gym.make(env_id, **env_kwargs). The arm is
+        # identical to panda, so the recorded joint actions replay unchanged; only the
+        # sensor set (the wrist camera) is added.
+        kwargs.setdefault("robot_uids", _REPLAY_ROBOT_UIDS)
     return _orig_make(env_id, *args, **kwargs)
 gym.make = _patched_make
 
@@ -110,6 +119,21 @@ def _report_reproduction(src: Path, dest: Path) -> None:
               f"(WSL->Windows backend drift?)")
 
 
+def _stamp_robot_uids(dataset_json: Path, robot_uids: str | None) -> None:
+    """Record the replay agent in the dataset sidecar's env_info.
+
+    Downstream (h5_to_lerobot discovers cameras from the data; eval/ee_verify read this to
+    build a matching env). No-op when robot_uids is None (the default panda — already implied).
+    """
+    if not robot_uids or not dataset_json.exists():
+        return
+    meta = json.loads(dataset_json.read_text())
+    meta.setdefault("env_info", {})["robot_uids"] = robot_uids
+    meta["env_info"].setdefault("env_kwargs", {})["robot_uids"] = robot_uids
+    dataset_json.write_text(json.dumps(meta, indent=2))
+    print(f"[h5_add_images] recorded robot_uids -> {robot_uids}")
+
+
 def _write_label_metadata(task: str, dataset_json: Path) -> None:
     """If the env exposes label_metadata(), stamp it into the dataset's sidecar.
 
@@ -149,11 +173,20 @@ def run(
     save_traj: bool = True,
     save_video: bool = False,
     verbose: bool = False,
+    robot_uids: str | None = None,
 ) -> Path:
     """Generate `count` episodes by replaying an action trajectory.
 
+    robot_uids: opt-in agent override for the replay (e.g. "panda_wristcam" to record a
+    wrist hand_camera alongside base_camera). None = keep the source's panda (1-cam,
+    backward-compatible). The arm kinematics are identical, so the recorded joint actions
+    replay unchanged; the chosen robot is stamped into the output sidecar so downstream
+    (h5_to_lerobot / eval / ee_verify) discovers the camera set without guessing.
+
     Returns the path to the produced HDF5 dataset.
     """
+    global _REPLAY_ROBOT_UIDS
+    _REPLAY_ROBOT_UIDS = robot_uids
     src = Path(traj_path) if traj_path else default_traj_path(task)
     if not src.exists():
         raise FileNotFoundError(
@@ -215,6 +248,9 @@ def run(
     # no-op for envs that don't define label_metadata)
     _write_label_metadata(task, dest.with_suffix(".json"))
 
+    # record which agent the replay used (so consumers discover the camera set)
+    _stamp_robot_uids(dest.with_suffix(".json"), robot_uids)
+
     # one-line fidelity summary: did the Windows replay reproduce the input's
     # successes? (cheap — both counts already live in the sidecars)
     _report_reproduction(src, dest)
@@ -235,6 +271,9 @@ def _cli() -> None:
                    help="Skip writing the output HDF5")
     p.add_argument("--save-video", action="store_true")
     p.add_argument("--verbose", action="store_true")
+    p.add_argument("--robot-uids", default=None,
+                   help="opt-in agent override for replay, e.g. panda_wristcam "
+                        "(adds a wrist hand_camera). Omit to keep the source's panda (1-cam).")
     args = p.parse_args()
     out = run(
         task=args.task,
@@ -247,6 +286,7 @@ def _cli() -> None:
         save_traj=not args.no_save_traj,
         save_video=args.save_video,
         verbose=args.verbose,
+        robot_uids=args.robot_uids,
     )
     print(f"\nGenerated dataset -> {out}")
 

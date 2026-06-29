@@ -38,9 +38,10 @@ def main():
 
     sidecar = json.load(open(args.traj_path.replace(".h5", ".json")))
     eps_meta = sidecar.get("episodes", [])
+    robot_uids = sidecar.get("env_info", {}).get("robot_uids", "panda")
 
     env, base, solver, base_p, base_q = make_env_and_solver(
-        args.task, sim_backend=args.sim_backend, obs_mode="none",
+        args.task, sim_backend=args.sim_backend, obs_mode="none", robot_uids=robot_uids,
     )
 
     f = h5py.File(args.traj_path, "r")

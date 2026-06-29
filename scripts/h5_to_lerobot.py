@@ -49,6 +49,40 @@ CHUNK_SIZE = 1000
 BASE_CAMERA = "base_camera"
 
 
+def select_cameras(available: list[str],
+                   camera: str | None = None,
+                   cameras: list[str] | None = None) -> list[str]:
+    """Decide which cameras to pack, **discovered from the data** (task-agnostic).
+
+    - camera=  : single explicit camera (backward-compat with the old --camera).
+    - cameras= : explicit list.
+    - both None: **discover all** cameras present in the dataset (multi-cam datasets
+      pack every camera; single-cam datasets stay byte-identical to before).
+
+    BASE_CAMERA (the embodiment's primary-camera contract) is ordered first when present;
+    the rest are sorted for determinism. Camera *names* come from the env-declared sensors —
+    nothing here is hardcoded per task, so any similar ManiSkill task rides through unchanged.
+    """
+    if camera and cameras:
+        raise ValueError("camera 와 cameras 는 동시에 줄 수 없습니다 (하나만 지정).")
+    if camera:
+        chosen = [camera]
+    elif cameras:
+        chosen = list(cameras)
+    else:
+        chosen = list(available)            # discover all
+    missing = [c for c in chosen if c not in available]
+    if missing:
+        raise ValueError(
+            f"카메라 {missing} 가 데이터셋에 없습니다. 사용 가능: {available}. "
+            f"정규 주 카메라명은 {BASE_CAMERA!r}(new_embodiment_config 와 일치). "
+            f"camera=/--camera 또는 cameras= 로 명시하거나, 환경이 그 카메라를 선언하게 하세요."
+        )
+    if BASE_CAMERA in chosen:               # primary-camera contract -> first
+        return [BASE_CAMERA] + sorted(c for c in chosen if c != BASE_CAMERA)
+    return chosen
+
+
 def _instruction(decoded: dict, template: str | None, fallback: str) -> str:
     """Language string for one episode, from decoded label_metadata."""
     if template:
@@ -83,8 +117,14 @@ def run(
     fps: int = 20,
     instruction: str | None = None,
     camera: str | None = None,
+    cameras: list[str] | None = None,
 ) -> Path:
-    """Build a GR00T LeRobot v2.1 dataset (absolute EEF actions) from a dataset h5. Returns out dir."""
+    """Build a GR00T LeRobot v2.1 dataset (absolute EEF actions) from a dataset h5. Returns out dir.
+
+    Cameras are **discovered** from the dataset (see select_cameras): all cameras by default,
+    or an explicit camera=/cameras= override. Multi-cam datasets pack every camera into its own
+    observation.images.<cam> video + modality entry; single-cam datasets are unchanged.
+    """
     import h5py
     import imageio.v2 as imageio
     import pyarrow as pa
@@ -97,6 +137,12 @@ def run(
     label_md = sidecar.get("label_metadata") or {}
 
     out = Path(out) if out else traj_path.parent / "lerobot"
+    # clear prior data/videos so the output reflects EXACTLY this conversion — otherwise
+    # a re-run with fewer episodes or a different camera set leaves stale mp4s/parquets
+    # (e.g. a 1-cam run's videos lingering under a later multi-cam conversion).
+    import shutil
+    for sub in ("data", "videos"):
+        shutil.rmtree(out / sub, ignore_errors=True)
     data_dir = out / "data" / "chunk-000"
     meta_dir = out / "meta"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -104,32 +150,28 @@ def run(
 
     f = h5py.File(traj_path, "r")
     keys = sorted(f.keys(), key=lambda k: int(k.split("_")[1]))
-    # 카메라는 위치(keys[0])가 아니라 **이름**으로 고른다 — base_camera 가 몇 번째든 OK.
-    # 데이터셋에 그 이름이 없으면 조용히 엉뚱한 카메라를 쓰지 말고 즉시 에러(또는 camera= 명시).
-    available = list(f[keys[0]]["obs"]["sensor_data"].keys())
-    cam = camera or BASE_CAMERA
-    if cam not in available:
+    # 카메라는 위치가 아니라 **이름**으로 고른다 — 데이터에 선언된 센서 중 rgb 가 있는 것만.
+    sensors = f[keys[0]]["obs"]["sensor_data"]
+    available = [c for c in sensors.keys() if "rgb" in sensors[c]]
+    try:
+        cams = select_cameras(available, camera=camera, cameras=cameras)
+    except ValueError:
         f.close()
-        raise ValueError(
-            f"카메라 {cam!r} 가 데이터셋에 없습니다. 사용 가능: {available}. "
-            f"정규 카메라명은 {BASE_CAMERA!r}(new_embodiment_config 와 일치). "
-            f"환경의 주 카메라를 {BASE_CAMERA!r} 로 두거나, 다른 카메라를 쓰려면 camera=/--camera 로 명시하세요."
-        )
-    video_key = f"observation.images.{cam}"
-    vid_dir = out / "videos" / "chunk-000" / video_key
-    vid_dir.mkdir(parents=True, exist_ok=True)
+        raise
+    video_keys = {c: f"observation.images.{c}" for c in cams}
+    for c in cams:
+        (out / "videos" / "chunk-000" / video_keys[c]).mkdir(parents=True, exist_ok=True)
 
     tasks: dict[str, int] = {}          # instruction -> task_index (first-seen order)
     episodes_meta = []                  # for episodes.jsonl
     state_all, action_all, ts_all = [], [], []   # for stats
-    H = W = 0
+    cam_hw: dict[str, tuple[int, int]] = {}   # camera -> (H, W)
     global_idx = 0
     qpos_dim = state_dim = action_dim = 0
 
     for i_key in keys:
         i = int(i_key.split("_")[1])
         ep = f[i_key]
-        rgb = ep["obs"]["sensor_data"][cam]["rgb"][:]          # (T,H,W,3) uint8
         qpos = ep["obs"]["agent"]["qpos"][:]                   # (T,Q)
         tcp = ep["obs"]["extra"]["tcp_pose"][:]                # (T,7)
         act = ep["actions"][:]                                 # (T-1,A) joint
@@ -138,8 +180,6 @@ def run(
         gripper = act[:, -1:].astype(np.float32)               # (N,1) gripper command
         action = np.concatenate([abs_eef[1:1 + n], gripper], axis=1)              # (N,10): pose[t+1]+gripper
         state = np.concatenate([qpos[:n].astype(np.float32), abs_eef[:n]], axis=1)  # (N,Q+9): pose[t]+qpos
-        frames = rgb[:n]                                       # (N,H,W,3)
-        H, W = frames.shape[1], frames.shape[2]
         qpos_dim = qpos.shape[1]
         state_dim = state.shape[1]
         action_dim = action.shape[1]
@@ -155,12 +195,15 @@ def run(
         instr = _instruction(decoded, instruction, env_id)
         tidx = tasks.setdefault(instr, len(tasks))
 
-        # video: N frames -> mp4
-        mp4 = vid_dir / f"episode_{i:06d}.mp4"
-        with imageio.get_writer(mp4, fps=fps, codec="libx264",
-                                macro_block_size=1, ffmpeg_log_level="error") as w:
-            for fr in frames:
-                w.append_data(fr)
+        # video: N frames -> one mp4 per camera (each into observation.images.<cam>/)
+        for c in cams:
+            frames = ep["obs"]["sensor_data"][c]["rgb"][:n]    # (N,H,W,3) uint8
+            cam_hw[c] = (frames.shape[1], frames.shape[2])
+            mp4 = out / "videos" / "chunk-000" / video_keys[c] / f"episode_{i:06d}.mp4"
+            with imageio.get_writer(mp4, fps=fps, codec="libx264",
+                                    macro_block_size=1, ffmpeg_log_level="error") as w:
+                for fr in frames:
+                    w.append_data(fr)
 
         # parquet: one row per step
         table = pa.table({
@@ -206,14 +249,14 @@ def run(
         "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
         "video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
         "features": {
-            video_key: {
-                "dtype": "video", "shape": [H, W, 3],
+            **{video_keys[c]: {
+                "dtype": "video", "shape": [cam_hw[c][0], cam_hw[c][1], 3],
                 "names": ["height", "width", "channels"],
-                "info": {"video.height": H, "video.width": W, "video.channels": 3,
-                         "video.codec": "h264", "video.pix_fmt": "yuv420p",
-                         "video.is_depth_map": False, "video.fps": float(fps),
-                         "has_audio": False},
-            },
+                "info": {"video.height": cam_hw[c][0], "video.width": cam_hw[c][1],
+                         "video.channels": 3, "video.codec": "h264",
+                         "video.pix_fmt": "yuv420p", "video.is_depth_map": False,
+                         "video.fps": float(fps), "has_audio": False},
+            } for c in cams},
             "observation.state": {"dtype": "float32", "shape": [state_dim],
                                   "names": ([f"qpos_{k}" for k in range(qpos_dim)]
                                             + ["eef_x", "eef_y", "eef_z"]
@@ -237,7 +280,7 @@ def run(
                   "eef": {"start": qpos_dim, "end": qpos_dim + 9}},
         "action": {"eef": {"start": 0, "end": 9},
                    "gripper": {"start": 9, "end": 10}},
-        "video": {cam: {"original_key": video_key}},
+        "video": {c: {"original_key": video_keys[c]} for c in cams},
         "annotation": {"human.task_description": {"original_key": "task_index"}},
     }
     (meta_dir / "modality.json").write_text(json.dumps(modality, indent=2), encoding="utf-8")
@@ -257,8 +300,9 @@ def run(
           f"-> {out}")
     print(f"[h5_to_lerobot] tasks ({len(tasks)}): "
           + "; ".join(f"{idx}:{t}" for t, idx in tasks.items()))
+    cams_desc = ", ".join(f"{video_keys[c]} {cam_hw[c][1]}x{cam_hw[c][0]}" for c in cams)
     print(f"[h5_to_lerobot] action={action_dim}d abs-EEF (xyz+rot6d+gripper), "
-          f"state={state_dim}d (qpos{qpos_dim}+eef9), video={video_key} {H}x{W}")
+          f"state={state_dim}d (qpos{qpos_dim}+eef9), cameras({len(cams)})=[{cams_desc}]")
     return out
 
 
@@ -270,10 +314,14 @@ def _cli() -> None:
     p.add_argument("--fps", type=int, default=20)
     p.add_argument("--instruction", default=None,
                    help="template using label_metadata keys, e.g. \"pick up the {target_id} cube\"")
-    p.add_argument("--camera", default=None)
+    p.add_argument("--camera", default=None,
+                   help="single explicit camera (backward-compat). Omit to discover all.")
+    p.add_argument("--cameras", default=None,
+                   help="comma-separated explicit camera list (e.g. base_camera,hand_camera)")
     args = p.parse_args()
+    cameras = args.cameras.split(",") if args.cameras else None
     out = run(args.traj_path, out=args.out, fps=args.fps,
-              instruction=args.instruction, camera=args.camera)
+              instruction=args.instruction, camera=args.camera, cameras=cameras)
     print(f"\nLeRobot dataset -> {out}")
 
 
