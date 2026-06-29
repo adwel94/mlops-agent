@@ -15,6 +15,11 @@ from __future__ import annotations
 import os
 import sys
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows cp949 가 — / 이모지 출력에서 깨지는 것 방지
+except Exception:
+    pass
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))  # project root (scripts.*)
 sys.path.insert(0, _HERE)
