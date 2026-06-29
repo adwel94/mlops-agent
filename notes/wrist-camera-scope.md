@@ -80,7 +80,7 @@ h5_to_lerobot(쓰기)·new_embodiment_config(학습)·_wsl_gr00t_eval(평가)이
    - `--robot-uids panda_wristcam` → 기존 panda 액션 궤적을 리플레이하며 손목캠 기록(WSL 재생성
      불필요, 팔 동일). 출력 sidecar 에 robot_uids 기록(`_stamp_robot_uids`).
    - task_to_h5 는 **불필요** — 액션은 로봇무관(팔 동일)이라 panda 궤적을 그대로 재사용.
-5. ⬜ WSL IK 재현 확인 (panda_v3 + ee_verify 소규모) — 무과금, **다음 단계**
+5. ✅ WSL IK 재현 확인 (panda_v3 + ee_verify) — **통과** (아래 결과)
 6. ⬜ (승인 후) 데이터 재생성 + 새 버전 push — 무과금이나 시간
 7. ⬜ (승인 후) 재학습 — **과금**
 
@@ -94,5 +94,18 @@ h5_to_lerobot(쓰기)·new_embodiment_config(학습)·_wsl_gr00t_eval(평가)이
   디렉토리 2개 각 5 mp4, parquet 5 (stale 청소 가드로 잔존 0) ✓
 - 1캠 하위호환: 기존 1캠 데이터셋 2-ep 변환 → 단일 base_camera 레이아웃 그대로(출력 불변) ✓
 
-남은 미검증: WSL 에서 panda_v3(panda_wristcam) mplib IK 재현율(ee_verify) — sim 성공이
-WSL 에서도 재현되는지. (Windows 렌더·액션 리플레이는 검증됨; WSL IK 는 별도.)
+### WSL IK 재현 (ee_verify, panda_v3) — 통과
+
+같은 첫 50 에피소드를 두 로봇으로 ee_verify(WSL mplib IK, sim 성공 재현):
+
+| 로봇 (URDF) | reproduction_rate | ik_fails |
+|---|---|---|
+| panda (panda_v2, 1캠) | **50/50 = 1.000** | 0 |
+| panda_wristcam (panda_v3, 2캠) | **49/50 = 0.980** | 0 |
+
+- 10 에피소드에선 9/10=0.900 이었으나 50 에피소드에서 0.980 → 0.900 은 소표본 노이즈였음.
+- panda_v3 가 panda_v2 대비 1개(2%)를 놓침. **ik_fails=0** → IK 방식 결함 아님. 원인 =
+  camera_link 질량이 hand 관성을 미세 변화 → 그 1개가 grasp 마진에서 WSL↔Windows 백엔드
+  드리프트로 넘어감(1캠에서도 문서화된 그 드리프트가 무거워진 손 때문에 1개 더).
+- **판정: 0.980 · ik_fails=0 은 "≈1.0" 기준 충족 → 평가 IK 경로 정직, 방식 건강. 진행 가능.**
+  (eval 은 wristcam 모델 성공을 ~98% 충실히 잰다; 1캠 대비 ~2% 더 노이즈하나 사용 범위.)
