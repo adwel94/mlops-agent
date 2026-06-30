@@ -45,3 +45,12 @@ threecubes:
       eval: 0.48
       date: '2026-06-30'
       image: adwel94/maniskill-gr00t-train:git-97d2204
+    v2-s20000:
+      dataset: v2
+      steps: 20000
+      full: false
+      repo: adwel94/gr00t-threecubes
+      tag: v2-s20000
+      eval: null
+      date: '2026-06-30'
+      image: adwel94/maniskill-gr00t-train:git-97d2204
