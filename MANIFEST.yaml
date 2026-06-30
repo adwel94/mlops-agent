@@ -16,8 +16,9 @@ threecubes:
       repo: adwel94/maniskill-threecubes-lerobot
       tag: v2
       date: '2026-06-30'
-      note: wrist-cam (panda_wristcam) — 2-camera [base_camera, hand_camera]; same 1000
-        trajectories as v1, regenerated with the wrist hand_camera added (reaching-precision fix)
+      note: wrist-cam (panda_wristcam) — 2-camera [base_camera, hand_camera]; same
+        1000 trajectories as v1, regenerated with the wrist hand_camera added (reaching-precision
+        fix)
   models:
     v1-s3000:
       dataset: v1
@@ -35,3 +36,12 @@ threecubes:
       tag: v1-s20000
       eval: 0.18
       date: '2026-06-26'
+    v2-s3000:
+      dataset: v2
+      steps: 3000
+      full: false
+      repo: adwel94/gr00t-threecubes
+      tag: v2-s3000
+      eval: null
+      date: '2026-06-30'
+      image: adwel94/maniskill-gr00t-train:git-97d2204
