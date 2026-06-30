@@ -42,6 +42,6 @@ threecubes:
       full: false
       repo: adwel94/gr00t-threecubes
       tag: v2-s3000
-      eval: null
+      eval: 0.48
       date: '2026-06-30'
       image: adwel94/maniskill-gr00t-train:git-97d2204
