@@ -78,11 +78,16 @@ def add_dataset(task: str, version: str, *, episodes: int | None, repo: str,
 
 
 def add_model(task: str, name: str, *, dataset: str, steps: int, full: bool, repo: str,
-              tag: str | None, eval: float | None = None, date: str | None = None) -> None:
-    """모델 학습런 한 줄 기록 (upsert). eval 은 평가 후 set-eval 로 채움."""
+              tag: str | None, eval: float | None = None, date: str | None = None,
+              image: str | None = None) -> None:
+    """모델 학습런 한 줄 기록 (upsert). eval 은 평가 후 set-eval 로 채움.
+
+    image = 학습에 쓴 학습 이미지 레퍼런스(불변 추적용, 예 maniskill-gr00t-train:git-<sha>).
+    선택 필드 — 옛 항목엔 없을 수 있고(하위호환), 주어질 때만 기록한다.
+    """
     data = load()
     node = data.setdefault(task, {}).setdefault("models", {})
-    node[name] = {
+    entry = {
         "dataset": dataset,
         "steps": steps,
         "full": full,
@@ -91,6 +96,9 @@ def add_model(task: str, name: str, *, dataset: str, steps: int, full: bool, rep
         "eval": eval,
         "date": date or _today(),
     }
+    if image:                       # 선택 필드 — 없으면 옛 스키마 그대로(키 자체를 안 만듦)
+        entry["image"] = image
+    node[name] = entry
     _save(data)
     print(f"[manifest] models/{task}/{name} 기록 -> {MANIFEST_PATH.name}")
 

@@ -132,6 +132,7 @@ def run(
             task or slug_from_repo(ds_repo), model_tag,
             dataset=dataset_ver, steps=max_steps, full=full,
             repo=hf_output_repo, tag=model_tag, eval=None,
+            image=image,   # 학습에 쓴 이미지 레퍼런스 기록(불변 추적 — :git-<sha> 권장)
         )
         print(f"[launch_train] 모델 태그 = {hf_output_repo}@{model_tag}  (평가 후: "
               f"python scripts/manifest.py set-eval {task or slug_from_repo(ds_repo)} {model_tag} <값>)")
