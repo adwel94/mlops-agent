@@ -228,7 +228,7 @@ python scripts\h5_to_lerobot.py --traj-path data\datasets\ThreeColoredCubes-v1\m
 
 - `h5_to_lerobot` 는 발견한 카메라마다 `videos/.../observation.images.<cam>/` 와 `modality.json` video 키를 만든다(기본 = 전체; `--camera`/`--cameras` 로 override). `info.json` 의 `total_videos = 에피소드 × 카메라 수`.
 - 학습(`new_embodiment_config.py`)·평가(`_wsl_gr00t_eval.py`)는 데이터셋 `meta/modality.json` 의 video 키에서 카메라 세트를 읽어 그대로 따른다 — 학습 이미지나 평가 코드를 캠 수에 맞춰 고칠 필요 없다.
-- **체크포인트는 카메라 수가 고정**(비전 인코더+projector가 그 입력으로 굳음) — 1캠 모델은 2캠 입력을 못 먹고 반대도 안 됨. 그래서 캠 구성이 다르면 **HF 태그로 분리**한다(예: 데이터셋 `v1`=1캠, `v2`=손목캠 2캠). 손목캠 도입의 설계·검증·성공률 비교는 `notes/wrist-camera-scope.md`.
+- **체크포인트는 카메라 수가 고정**(비전 인코더+projector가 그 입력으로 굳음) — 1캠 모델은 2캠 입력을 못 먹고 반대도 안 됨. 그래서 캠 구성이 다르면 **HF 태그로 분리**한다(예: 데이터셋 `v1`=1캠, `v2`=손목캠 2캠). 손목캠 도입의 설계·검증은 `notes/wrist-camera-impl.md`, 성공률 비교는 `notes/model-perf-journey.md` §5.
 
 ## 출력 파일 명명 규칙
 

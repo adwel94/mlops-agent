@@ -1,42 +1,17 @@
-# 손목 카메라 확장 — 검수 범위 & 설계 (2026-06-29)
+# 손목 카메라 구현 — 설계 & 검증 (2026-06-29)
 
-## 결과 (2026-06-30) — 가설 검증됨 ✅
-
-손목캠 평가로 진단이 **결정적으로 검증**됐다. 50ep, seed=0, action_steps=16 (전부 동일조건):
-
-| | v1-s3000 (1캠) | v1-s20000 (1캠) | v2-s3000 (손목캠) | **v2-s20000 (손목캠)** |
-|---|---|---|---|---|
-| 성공률 | 0.20 | 0.32 | 0.48 | **0.54** |
-| any_pick | — | 0.34 | 0.48 | 0.54 |
-| correct_color | — | 0.94 | 1.00 | **1.00** (27/27) |
-| 못 집은 실패 손→큐브 빗나감 | — | **8.4cm** | 2.0cm | **1.5cm** |
-| 성공 시 손→큐브 | — | 1.1cm | 0.9cm | 0.9cm |
-| 학습 스텝 | 3000 | 20000 | 3000 | 20000 |
-
-**① 손목캠 효과 (같은 스텝, 1캠→손목캠):**
-- 3000스텝: 0.20→**0.48** (2.4배). 20000스텝: 0.32→**0.54** (1.7배).
-- 손목캠 v2-s3000(3k)이 **1캠 20000스텝(0.32)보다도 높다**(1/7 학습량) — reaching 천장 자체가 올라감.
-- **결정적 증거**: 진단의 "단일 고정 카메라 깊이 모호성 → 8cm 빗나감"이 손목캠으로 **8.4→2.0cm**
-  급감. 못 집은 실패도 gross 8cm가 아니라 1.5~2cm 근접 실패(최소 0.3cm).
-
-**② 스텝↑ 효과 (손목캠, 3k→20k):**
-- 성공 0.48→**0.54** (+6%p), 근접 실패 빗나감 2.0→**1.5cm** (더 좁혀짐).
-- 단 v1의 3k→20k(+12%p)보다 증가폭이 작다 — 손목캠은 3k에 이미 0.48로 빨리 학습해 **조기에
-  천장 근처**. 남은 1.5cm 근접 실패는 스텝보다 **해상도(128²)·카메라 각도**가 다음 레버일 가능성.
-
-**③ 공통 패턴 (손목캠):** 집은 건 **전부 성공**(any_pick=success), 색 **100%** → 유일한 잔여 실패
-모드 = "1.5cm 근접 실패". 닿기만 하면 무조건 잡고 색도 맞춘다.
-
-주의: 50ep 단발이라 확산 정책 분산으로 절대값 CI는 유의하나, 1캠↔손목캠 격차(빗나감 8.4→1.5cm,
-성공 0.32→0.54)는 노이즈 초과 — 신호 견고. (모델: `@v2-s3000`(0.48)·`@v2-s20000`(0.54),
-MANIFEST 기록.)
+> **엔지니어링 노트.** 이 문서는 **하나만 말한다**: 손목 카메라를 이 하네스에
+> **어떻게** 붙였나 — 설계 원칙·핵심 메커니즘·변경 범위·구현 검증. **왜** 이걸 했는지,
+> 그리고 **효과(성능 결과)**는 진단 여정 문서에 있다 → `model-perf-journey.md` §4~5.
+> 여기 "검증"은 파이프라인이 올바른 데이터를 내는지 / IK 경로가 정직한지에 대한
+> **구현 검증**이지, 모델 성능 결과가 아니다.
 
 ## 왜 (한 줄)
 
 v1 모델 진단 결론: 병목은 **단일 고정 카메라(base_camera)로 큐브 3D 위치를 정밀하게 못
 잡는 reaching 정밀도**. NVIDIA/Seeed 공식 정밀 레시피는 **손목 카메라**를 쓴다(근접 시점으로
 깊이 모호성 제거). → 손목캠을 **범용·하위호환** 방식으로 파이프라인에 추가한다.
-(상세 진단: `model-eval-diagnosis.md` §7, `eval-investigation-log.md`)
+(진단·처방 선택 근거: `model-perf-journey.md` §4. 효과 검증: 같은 문서 §5.)
 
 ## 설계 원칙 (둘 다 필수)
 
@@ -70,8 +45,9 @@ ManiSkill 내장 **`panda_wristcam`** 에이전트 = Panda + realsense 카메라
 | `scripts/task_to_h5.py` | robot_uids 옵트인 플래그 배선 (기본 panda) | WSL 솔버도 같은 robot 써야 함 |
 | `scripts/h5_add_images.py` | robot_uids 옵트인 배선 (리플레이 시 같은 robot) | obs_mode=rgb 가 센서 자동 기록 → 카메라 자체는 코드 변경 0 |
 | `scripts/h5_to_lerobot.py` | **단일캠 → 카메라 목록 발견**(info.json features·modality.json video·mp4 디렉토리 루프) | 기본 = 데이터에 있는 카메라 전부; 1캠이면 출력 불변 |
-| `cloud/runpod/new_embodiment_config.py` | video modality_keys 를 **데이터셋 modality.json 에서 동적**으로 | ★범용성 깨질 유일 지점 — 하드코딩 금지. launch_finetune 배선 먼저 확인 |
+| `cloud/runpod/new_embodiment_config.py` | video modality_keys 를 **데이터셋 modality.json 에서 동적**으로 | ★범용성 깨질 유일 지점 — 하드코딩 금지 |
 | `scripts/_wsl_gr00t_eval.py` | obs video dict 에 데이터셋이 쓴 카메라 전부 전송 | 서빙 모델의 캠 수와 일치해야 |
+| `scripts/ik_exec.py` | `make_env_and_solver` 에 `robot_uids` 인자 | eval/ee_verify/abs_replay 공유 |
 | `scripts/custom_envs.py` | (선택) SUPPORTED_ROBOTS 에 panda_wristcam 추가 — 경고 제거·일급화 | 기능 아닌 위생 |
 
 ### 안 건드림 (확인)
@@ -79,8 +55,8 @@ ManiSkill 내장 **`panda_wristcam`** 에이전트 = Panda + realsense 카메라
 `gr00t_eval` 래퍼/serve·train 래퍼(tcp_pose·액션만), `h5_report`(기본 base_camera + --camera).
 
 ### 코드 아님 = 비용 (사용자 승인 후)
-- 데이터 전체 재생성: task_to_h5(wristcam) → h5_add_images(wristcam) → h5_to_lerobot →
-  hf_push **새 버전 태그**(예: v2-wristcam). 기존 v1 은 불변.
+- 데이터 전체 재생성: h5_add_images(wristcam) → h5_to_lerobot → hf_push **새 버전 태그**(v2).
+  기존 v1 은 불변. (task_to_h5 재실행 불필요 — 아래 "착수 순서" 참조.)
 - 재학습 (과금) — 모델이 손목 입력을 실제로 쓰려면 필수. 새 모델 태그.
 
 ## 하위호환 — 모델은 캠 수 고정
@@ -96,7 +72,7 @@ modality.json 이 "이 모델 캠 몇 개"를 알려주니 거기 맞춰 전송.
 h5_to_lerobot(쓰기)·new_embodiment_config(학습)·_wsl_gr00t_eval(평가)이 모두 여기서 카메라
 목록을 읽는다. 어디서도 카메라 이름/개수를 하드코딩하지 않는다 → 태스크 무관 범용.
 
-## 착수 순서 (진행 상황)
+## 착수 순서 (진행 상황 — 전부 완료)
 
 1. ✅ 손목캠 CPU 렌더 게이트 (프로브) — **통과** (base+hand 둘 다 렌더, hand 뷰=근접 워크스페이스)
 2. ✅ 이 스코프 문서 — 작성·갱신됨
@@ -113,9 +89,9 @@ h5_to_lerobot(쓰기)·new_embodiment_config(학습)·_wsl_gr00t_eval(평가)이
    - task_to_h5 는 **불필요** — 액션은 로봇무관(팔 동일)이라 panda 궤적을 그대로 재사용.
 5. ✅ WSL IK 재현 확인 (panda_v3 + ee_verify) — **통과** (아래 결과)
 6. ✅ 데이터 재생성 + 새 버전 push — HF `maniskill-threecubes-lerobot@v2` (1000ep, 2캠)
-7. ✅ 재학습 2회 — `@v2-s3000`(eval 0.48)·`@v2-s20000`(eval 0.54) → **가설 검증됨**(맨 위 결과 표)
+7. ✅ 재학습 2회 — `@v2-s3000`·`@v2-s20000` (**성능 결과는 `model-perf-journey.md` §5**)
 
-## 검증 결과 (2026-06-29, Windows CPU, 5-ep 스모크)
+## 구현 검증 결과 (2026-06-29, Windows CPU, 5-ep 스모크)
 
 기존 panda `motionplanning.h5` 를 `--robot-uids panda_wristcam` 로 5에피소드 리플레이:
 - 카메라 = `['base_camera', 'hand_camera']`, hand 이미지 비검정(min=32 mean=117.6) ✓
