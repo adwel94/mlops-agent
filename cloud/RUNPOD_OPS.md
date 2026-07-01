@@ -6,6 +6,27 @@
 
 > 과금 파드다. 명시 요청 시에만 띄우고, 끝나면 반드시 종료(§4).
 
+## 관측 지점 (채널·대시보드)
+
+런 중 무엇을 어디서 보나. 대부분 파드가 push 하고(에이전트는 읽기만), `#ai-리포팅` 만
+에이전트가 쓴다. Discord **채널 정의의 원천은 코드** — `cloud/common/utils/discord.py` 의
+`DiscordChannel` enum(정의를 여기 복제하지 않는다).
+
+| 표면 | 무엇을 보나 | 에이전트가 읽는 법 | train / serve |
+|---|---|---|---|
+| **W&B** | loss/lr 곡선(실시간) | `cloud/train/wandb_status.py`(수치) | train |
+| **PIPELINE** | 학습 시작·N스텝 진행바·완료·업로드·실패 | Discord 채널(사람) | train |
+| **STDOUT** | 파드 raw stdout(부팅~fetch~기동~실패) | `cloud/train/read_logs.py`(봇 토큰) | train·serve |
+| **RUNPOD** | 파드/과금 — 생성·자가종료·종료실패 경보 | Discord 채널(사람) | train·serve |
+| **#ai-리포팅** | AI 자연어 추세 리포트 | `cloud/train/ai_report.py "msg"` 로 **에이전트가 push** | train·(serve) |
+| **BOOT_TIMING** | 부팅 계측 BOOT_PROFILE 한 줄 | Discord 채널(비교용) | train·serve |
+| **Prefect** | flow/task 상태·재시도·이력 | Prefect Cloud | train |
+
+- **학습 중**: 지표=**W&B**(`wandb_status.py` 로 수치를 prose 에), 진행/실패=**STDOUT**
+  (`read_logs.py`)+**PIPELINE**, 파드 생사·과금=**RUNPOD**. 부팅 로그 검증(§1)도 STDOUT 으로.
+- **서빙/평가 중**: serve 는 W&B·PIPELINE 없음 — **STDOUT**(`read_logs.py`)으로 부팅·모델
+  fetch·5555 기동을 본다.
+
 ## 폴링 방식 (공통 메커니즘)
 
 파드 상태는 하네스가 못 추적하는 외부 상태 — 자동 알림이 없으니 직접 폴링한다.
