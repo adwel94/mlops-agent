@@ -19,16 +19,16 @@
 
 ## 환경 가정
 
-명령 실행에 필요한 운영 사실. (설치 레시피는 README "WSL 환경 준비".)
+명령 실행에 필요한 운영 사실. (pip 의존성 = `requirements.txt`, 부트스트랩 절차 = SETUP.md.)
 
 **Windows** (소비 파이프라인 + task_to_h5 오케스트레이션) — conda env `maniskill`,
 Python `C:\Users\hun41\miniconda3\envs\maniskill\python.exe`. 시뮬·렌더 모두 **CPU 백엔드**.
-주요 패키지 `mani_skill 3.0.1`/`sapien 3.0.3`/`torch 2.12.0+cpu`/`h5py`/`gymnasium`.
+pip 의존성은 `requirements.txt`(단일 출처).
 **`pinocchio` 미설치** → 라이브 EE 컨트롤(`pd_ee_delta_pose`)·텔레오퍼레이션 미지원
 (④는 오프라인 변환 + WSL mplib IK 로 우회).
 
 **WSL** (`task_to_h5`·`ee_verify`·`gr00t_eval` 전용 — `mplib` 이 Linux 전용 바이너리라) —
-`Ubuntu-22.04`, Miniconda `maniskill` env(Python 3.10, `mplib 0.1.1`, `numpy<2`),
+`Ubuntu-22.04`, Miniconda `maniskill` env(Python 3.10; pip 의존성 `requirements.txt`),
 Python `/root/miniconda3/envs/maniskill/bin/python`. **소프트웨어 Vulkan**(lavapipe ICD
 `/usr/share/vulkan/icd.d/lvp_icd.x86_64.json`) — WSL엔 GPU Vulkan 없어 sapien 이 씬을 못
 띄움. 위 값은 `task_to_h5.py` 상단 상수(`WSL_DISTRO`/`WSL_PYTHON`/`WSL_VK_ICD`).

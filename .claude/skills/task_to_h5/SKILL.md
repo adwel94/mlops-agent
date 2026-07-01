@@ -23,7 +23,7 @@ description: ManiSkill 모션 플래닝으로 로봇 팔의 액션 궤적을 처
 
 ## 동작 원리 / 주의사항
 
-- **전제조건: WSL 환경.** WSL Ubuntu-22.04 + Miniconda `maniskill` env + `mesa-vulkan-drivers`(lavapipe) 가 미리 설치돼 있어야 함 (README "WSL 환경 준비"). 안 돼 있으면 그 안내와 함께 실패.
+- **전제조건: WSL 환경.** WSL Ubuntu-22.04 + Miniconda `maniskill` env + `mesa-vulkan-drivers`(lavapipe) 가 미리 설치돼 있어야 함 (SETUP.md). 안 돼 있으면 그 안내와 함께 실패.
 - WSL엔 GPU Vulkan이 없어 **소프트웨어 Vulkan(llvmpipe)** 으로 렌더 디바이스를 띄움 (`VK_ICD_FILENAMES`=lavapipe + 래퍼의 `render_backend='cpu'` 주입/`RenderSystem` 폴백). 이게 WSL headless 동작의 핵심.
 - 산출물은 `obs_mode=none`(이미지 없음). 학습용 RGB가 필요하면 이어서 `/h5_add_images <태스크> <count>` (기본 입력이 이 파일).
 - `ThreeColoredCubes-v1` 같은 이 하네스의 커스텀 태스크는 `scripts/custom_solutions.py` 의 솔루션으로 풀림. 솔버 미지원 태스크(예: PickClutterYCB)는 솔루션 직접 작성 필요 — 현재 범위 밖.

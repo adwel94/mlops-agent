@@ -26,7 +26,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-# --- WSL environment constants (prerequisite, see README "WSL 환경 준비") --------
+# --- WSL environment constants (prerequisite, see SETUP.md) ---------------------
 WSL_DISTRO = "Ubuntu-22.04"
 WSL_PYTHON = "/root/miniconda3/envs/maniskill/bin/python"
 # Force sapien onto the Mesa lavapipe software Vulkan ICD (WSL has no GPU Vulkan).
@@ -130,7 +130,7 @@ def run(
         raise RuntimeError(
             f"[task_to_h5] WSL motion planning failed (exit {proc.returncode}).\n"
             f"--- stderr tail ---\n{proc.stderr[-2000:]}\n"
-            f"Check that the WSL env is set up (see README 'WSL 환경 준비')."
+            f"Check that the WSL env is set up (see SETUP.md)."
         )
 
     # surface the solver's summary metrics (strip tqdm progress-bar glyphs that a

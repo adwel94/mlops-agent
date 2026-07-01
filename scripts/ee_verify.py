@@ -77,7 +77,7 @@ def run(
         raise RuntimeError(
             f"[ee_verify] WSL execution failed (exit {proc.returncode}).\n"
             f"--- stderr tail ---\n{proc.stderr[-2000:]}\n"
-            f"Check the WSL env (see README 'WSL 환경 준비')."
+            f"Check the WSL env (see SETUP.md)."
         )
 
     m = re.search(r"DONE ee_verify (.+)", out)

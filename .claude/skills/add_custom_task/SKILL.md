@@ -66,7 +66,7 @@ C:\Users\hun41\miniconda3\envs\maniskill\python.exe scripts\validate_custom_task
 ## 동작 / 주의사항
 
 - 이 스킬은 다른 모든 스킬이 소비하는 per-task 파일을 *생성*하는 **메타 스킬** — 잘못 생성하면 `custom_envs.py` 를 오염시키니 신중히, 검증 통과 전엔 "완료"라 하지 않는다.
-- 동적 검증은 sim 실행(무과금·가역) — 진행 가능. 단 WSL 전제(README 'WSL 환경 준비').
+- 동적 검증은 sim 실행(무과금·가역) — 진행 가능. 단 WSL 전제(SETUP.md).
 - "산출물 무결성": 검증 PASS = 약속한 것을 온전히 냈다. 검증 없이 "구현 완료"라 보고하지 않는다.
 
 ## 예시

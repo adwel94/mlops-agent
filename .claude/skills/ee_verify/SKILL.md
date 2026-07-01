@@ -24,7 +24,7 @@ mplib이 Linux 전용이라 실행은 WSL에서 돌고, 이 스킬이 Windows에
 
 - **랜덤 샘플 게이트**: 변환은 결정론적이라 랜덤 N개가 재현되면 방식이 건강한 것으로 본다(전체 보장이 필요하면 `--count 0`). h5_to_lerobot은 통과 후 **전체**를 변환한다(실패분 제외 필터링은 하지 않음 — 게이트 통과 = 방식 신뢰).
 - **소스 h5에서만 동작**: 검증은 sim을 에피소드 초기 씬으로 reset해야 하는데, 그 초기상태(`episode_seed`)는 소스 데이터셋 h5에만 있고 LeRobot 출력엔 없다. 그래서 ee_verify는 **포장 전** 단계이며 LeRobot 데이터셋을 읽지 않는다.
-- **전제조건: WSL 환경** (mplib + 소프트웨어 Vulkan). 미설치면 그 안내와 함께 실패 (README "WSL 환경 준비").
+- **전제조건: WSL 환경** (mplib + 소프트웨어 Vulkan). 미설치면 그 안내와 함께 실패 (SETUP.md).
 - 입력은 `--obs-mode rgb` 로 만들어진 데이터셋이어야 함 (`obs/extra/tcp_pose`, `obs/agent/qpos` 존재). 원본 `motionplanning.h5`(obs 없음)는 안 됨.
 - 검증은 각 델타를 **기록된 tcp_pose 기준**으로 적용(기록 waypoint를 IK로 추종)해 성공을 본다 — 닫힌 루프 정책이 보정하는 open-loop 드리프트는 의도적으로 배제. IK 목표는 로봇 **base 프레임**으로 변환되어 들어감(실행기 내부 처리).
 - 시뮬만 돌고 파일은 안 만든다 (순수 검증).

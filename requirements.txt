@@ -1,0 +1,30 @@
+# ManiSkill 하네스 — pip 의존성 단일 출처 (Windows + WSL, 플랫폼 마커로 분기).
+#
+#   설치·검증:  python scripts/check_maniskill_env.py --fix   (requirements.txt 를 읽어 설치)
+#   직접:        pip install -r requirements.txt
+#
+# 최초 부트스트랩(conda env 생성 · WSL distro/apt · .env 시크릿)은 SETUP.md 참고 —
+# 그건 매니페스트로 담을 수 없는 절차라 이 파일이 아니라 SETUP.md 가 출처다.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# --- 코어: sim · 렌더 · 데이터셋 (Windows/WSL 공용) ---
+mani_skill==3.0.1
+sapien==3.0.3
+torch==2.12.0+cpu
+gymnasium
+h5py
+pillow
+numpy<2
+
+# --- LeRobot 변환 · 품질 리포트 (h5_to_lerobot · h5_report) ---
+pyarrow
+imageio
+imageio-ffmpeg
+
+# --- WSL 전용: 모션플래닝/IK · 정책 서버 통신 (task_to_h5 · ee_verify · gr00t_eval) ---
+# mplib 은 Linux 바이너리만 존재 → Windows 에선 마커로 자동 skip.
+mplib; sys_platform == "linux"
+pyzmq; sys_platform == "linux"
+msgpack; sys_platform == "linux"
+msgpack-numpy; sys_platform == "linux"
