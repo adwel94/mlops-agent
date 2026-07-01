@@ -11,7 +11,7 @@ serve_policy(5555/tcp) 를 자급 실행한다 (SSH 불필요).
 
 사전: export RUNPOD_API_KEY=... (+ private repo 면 HF_TOKEN)
   - Python:  from serve_up import run; run("adwel94/gr00t-threecubes-ft")
-  - CLI:     python cloud/runpod/serve_up.py adwel94/gr00t-threecubes-ft
+  - CLI:     python cloud/serve/serve_up.py adwel94/gr00t-threecubes-ft
 """
 from __future__ import annotations
 
@@ -24,9 +24,10 @@ try:
 except Exception:
     pass
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))  # project root
-sys.path.insert(0, _HERE)
+_HERE = os.path.dirname(os.path.abspath(__file__))          # cloud/serve
+_ROOT = os.path.dirname(os.path.dirname(_HERE))             # project root
+sys.path.insert(0, _ROOT)
+sys.path.insert(0, os.path.join(_ROOT, "cloud", "runpod"))  # RunPod 원자(runpod_client/runpod_up)
 from runpod_client import CloudType, GPUType  # noqa: E402
 from runpod_up import DEFAULT_IMAGE, run as _up  # noqa: E402
 
@@ -44,6 +45,7 @@ def run(
     name: str = "gr00t-serve",
     gpu: GPUType | str = DEFAULT_GPU,
     hf_model_subdir: str | None = None,
+    hf_model_revision: str | None = None,
     volume: int = DEFAULT_VOLUME_GB,
     container_disk: int = DEFAULT_DISK_GB,
     image: str = DEFAULT_IMAGE,
@@ -54,11 +56,14 @@ def run(
 
     hf_model: 서빙할 파인튜닝 모델 HF repo id (필수). 부팅 때 받아 MODEL_PATH 자동 설정.
     hf_model_subdir: repo 내 체크포인트 서브폴더 (구 레이아웃 호환; 보통 불필요).
+    hf_model_revision: HF repo 의 브랜치/태그/커밋 (기본 main). 같은 repo 안의 특정 버전
+      태그(예: v2-s3000)를 서빙할 때 필수 — 생략 시 main(=최신 push)이 받힌다.
     """
     pod_id = _up(
         name=name, gpu=gpu, volume=volume, container_disk=container_disk,
         image=image, cloud_type=cloud_type, ports=ports or DEFAULT_PORTS,
         mode="serve", hf_model=hf_model, hf_model_subdir=hf_model_subdir,
+        hf_model_revision=hf_model_revision,
     )
     print(
         "\n[gr00t_serve] 서빙 파드 부팅 중 — 5555/tcp 가 뜨면 (RunPod 콘솔/`/runpod_ls` 에서\n"
@@ -79,6 +84,8 @@ def _cli() -> None:
                    help="GPUType 이름 (기본 NVIDIA_L40S=48GB)")
     p.add_argument("--hf-model-subdir", default=None,
                    help="repo 내 체크포인트 서브폴더 (구 레이아웃 호환; 보통 불필요)")
+    p.add_argument("--revision", dest="hf_model_revision", default=None,
+                   help="HF repo 의 브랜치/태그/커밋 (기본 main) 예: v2-s3000")
     p.add_argument("--volume", type=int, default=DEFAULT_VOLUME_GB)
     p.add_argument("--container-disk", type=int, default=DEFAULT_DISK_GB)
     p.add_argument("--image", default=DEFAULT_IMAGE)
@@ -86,8 +93,9 @@ def _cli() -> None:
                    choices=[c.name for c in CloudType])
     args = p.parse_args()
     run(hf_model=args.hf_model, name=args.name, gpu=args.gpu,
-        hf_model_subdir=args.hf_model_subdir, volume=args.volume,
-        container_disk=args.container_disk, image=args.image, cloud_type=args.cloud_type)
+        hf_model_subdir=args.hf_model_subdir, hf_model_revision=args.hf_model_revision,
+        volume=args.volume, container_disk=args.container_disk, image=args.image,
+        cloud_type=args.cloud_type)
 
 
 if __name__ == "__main__":

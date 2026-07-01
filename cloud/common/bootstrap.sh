@@ -5,7 +5,7 @@
 # arch 가 어긋나 충돌(그래서 thin 이미지 유지, 무거운 설치는 굽지 않고 여기서).
 # 베이스 이미지: RunPod 공식 PyTorch/CUDA 12.8 이미지 권장 (드라이버/CUDA 내장).
 #
-# SSH 접속 후:  bash /workspace/maniskill/cloud/runpod/bootstrap.sh
+# SSH 접속 후:  bash /workspace/maniskill/cloud/common/bootstrap.sh
 set -euo pipefail
 
 WORKSPACE="${WORKSPACE:-/workspace}"

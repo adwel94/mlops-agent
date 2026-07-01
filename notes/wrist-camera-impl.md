@@ -45,7 +45,7 @@ ManiSkill 내장 **`panda_wristcam`** 에이전트 = Panda + realsense 카메라
 | `scripts/task_to_h5.py` | robot_uids 옵트인 플래그 배선 (기본 panda) | WSL 솔버도 같은 robot 써야 함 |
 | `scripts/h5_add_images.py` | robot_uids 옵트인 배선 (리플레이 시 같은 robot) | obs_mode=rgb 가 센서 자동 기록 → 카메라 자체는 코드 변경 0 |
 | `scripts/h5_to_lerobot.py` | **단일캠 → 카메라 목록 발견**(info.json features·modality.json video·mp4 디렉토리 루프) | 기본 = 데이터에 있는 카메라 전부; 1캠이면 출력 불변 |
-| `cloud/runpod/new_embodiment_config.py` | video modality_keys 를 **데이터셋 modality.json 에서 동적**으로 | ★범용성 깨질 유일 지점 — 하드코딩 금지 |
+| `cloud/common/new_embodiment_config.py` | video modality_keys 를 **데이터셋 modality.json 에서 동적**으로 | ★범용성 깨질 유일 지점 — 하드코딩 금지 |
 | `scripts/_wsl_gr00t_eval.py` | obs video dict 에 데이터셋이 쓴 카메라 전부 전송 | 서빙 모델의 캠 수와 일치해야 |
 | `scripts/ik_exec.py` | `make_env_and_solver` 에 `robot_uids` 인자 | eval/ee_verify/abs_replay 공유 |
 | `scripts/custom_envs.py` | (선택) SUPPORTED_ROBOTS 에 panda_wristcam 추가 — 경고 제거·일급화 | 기능 아닌 위생 |
@@ -79,7 +79,7 @@ h5_to_lerobot(쓰기)·new_embodiment_config(학습)·_wsl_gr00t_eval(평가)이
 3. ✅ generic 멀티캠 소비자 리팩터 — **완료·검증됨**
    - `h5_to_lerobot.py`: `select_cameras()` 발견 기반(기본 전체 카메라, base 우선) +
      카메라별 video/feature/modality 루프 + 출력 stale 청소 가드
-   - `cloud/runpod/new_embodiment_config.py`: video modality_keys 를 데이터셋 modality.json
+   - `cloud/common/new_embodiment_config.py`: video modality_keys 를 데이터셋 modality.json
      에서 동적 발견(`_discover_video_keys`, 실패 시 base_camera 폴백)
    - `_wsl_gr00t_eval.py`: 모든 카메라 전송(`_build_obs` 다중캠) + sidecar robot_uids 따라 env 구성
    - `ik_exec.make_env_and_solver`: `robot_uids` 인자 추가(eval/ee_verify/abs_replay 공유)

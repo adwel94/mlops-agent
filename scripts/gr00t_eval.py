@@ -12,7 +12,7 @@ because the rollout needs each episode's `episode_seed` (to reset the scene) and
 h5_to_lerobot -> train (cloud) -> serve policy -> gr00t_eval against the source dataset.
 
 Prereq (one-time, in the WSL maniskill env):  pip install pyzmq msgpack msgpack-numpy
-Serve the policy on RunPod: cloud/runpod/serve_policy.sh  (exposes tcp port).
+Serve the policy on RunPod: cloud/serve/serve_policy.sh  (exposes tcp port).
 
   - Python:  from scripts.gr00t_eval import run; run("data/.../*.rgb.*.h5", server_host="...")
   - CLI:     python scripts/gr00t_eval.py --traj-path data/.../*.rgb.*.h5 --server-host <ip>

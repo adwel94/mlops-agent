@@ -53,6 +53,7 @@ def _build_env(
     model_path: str | None,
     hf_model: str | None = None,
     hf_model_subdir: str | None = None,
+    hf_model_revision: str | None = None,
 ) -> dict[str, str]:
     """파드 ENTRYPOINT(pod_start.sh)로 넘길 env. 비밀(HF_TOKEN)은 .env 에서 끌어온다."""
     env: dict[str, str] = {"MODE": mode}
@@ -67,6 +68,10 @@ def _build_env(
         env["HF_MODEL"] = hf_model
     if hf_model_subdir:
         env["HF_MODEL_SUBDIR"] = hf_model_subdir
+    # 특정 브랜치/태그/커밋 고정 (fetch_model.sh 가 읽음, 기본 main). 같은 repo 안에서
+    # 버전 태그(예: v2-s3000)를 골라 받을 때 필수 — 없으면 main(=최신 push)이 받힌다.
+    if hf_model_revision:
+        env["HF_MODEL_REVISION"] = hf_model_revision
     # 비밀: 셸/.env 에 있으면 전달.
     #   HF_TOKEN                — private HF repo·gated 모델 다운로드
     #   STDOUT_WEBHOOK_URL      — stdout 시퍼가 Discord STDOUT 채널로 로그 전송(원격 디버깅)
@@ -93,18 +98,21 @@ def run(
     model_path: str | None = None,
     hf_model: str | None = None,
     hf_model_subdir: str | None = None,
+    hf_model_revision: str | None = None,
 ) -> str:
     """Pod 을 생성하고 pod_id 를 반환 (+ connect 정보·다음 단계 출력).
 
     mode: 파드 부팅 동작 — serve(④ 정책서버) / smoke(① 스모크) / idle(대기).
     hf_dataset: HF Hub LeRobot 데이터셋 repo id (부팅 때 /workspace/lerobot 로 받음).
     serve_base: True 면 베이스 모델 서빙(SERVE_BASE=1); False+model_path 면 체크포인트.
+    hf_model_revision: HF repo 의 브랜치/태그/커밋(기본 main). 같은 repo 의 특정 버전 태그를 서빙할 때.
     """
     if isinstance(gpu, str):
         gpu = GPUType[gpu]
     if isinstance(cloud_type, str):
         cloud_type = CloudType[cloud_type]
-    env = _build_env(mode, hf_dataset, serve_base, model_path, hf_model, hf_model_subdir)
+    env = _build_env(mode, hf_dataset, serve_base, model_path, hf_model,
+                     hf_model_subdir, hf_model_revision)
     pod_id = create(
         name=name, image_name=image, gpu_id=gpu, gpu_count=gpu_count,
         volume=volume, container_disk=container_disk, cloud_type=cloud_type,
@@ -151,12 +159,15 @@ def _cli() -> None:
                    help="HF 체크포인트 repo id (부팅 때 받아 MODEL_PATH 자동 설정) 예: adwel94/gr00t-threecubes-ft")
     p.add_argument("--hf-model-subdir", default=None,
                    help="repo 내 체크포인트 서브폴더 예: gr00t-ft-2a8zwjb894k3dx")
+    p.add_argument("--hf-model-revision", default=None,
+                   help="HF repo 의 브랜치/태그/커밋 (기본 main) 예: v2-s3000")
     args = p.parse_args()
     run(name=args.name, gpu=args.gpu, gpu_count=args.gpu_count, volume=args.volume,
         container_disk=args.container_disk, image=args.image,
         cloud_type=args.cloud_type, ports=args.ports, mode=args.mode,
         hf_dataset=args.hf_dataset, serve_base=args.serve_base, model_path=args.model_path,
-        hf_model=args.hf_model, hf_model_subdir=args.hf_model_subdir)
+        hf_model=args.hf_model, hf_model_subdir=args.hf_model_subdir,
+        hf_model_revision=args.hf_model_revision)
 
 
 if __name__ == "__main__":

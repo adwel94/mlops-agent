@@ -15,12 +15,11 @@ WORKDIR /app
 
 # 학습 파이프라인 스크립트 (entrypoint/options/train_flow/_gr00t_train/discord_callback)
 COPY cloud/train/ /app/
-# 서빙 번들과 공유: GR00T 설치 스크립트 · modality config · Discord 유틸
-COPY cloud/runpod/bootstrap.sh /app/bootstrap.sh
-COPY cloud/runpod/new_embodiment_config.py /app/new_embodiment_config.py
-COPY cloud/runpod/utils/ /app/utils/
-# stdout 시퍼(공유 파드 인프라 — 단일 출처는 cloud/runpod). entrypoint 가 /app 에서 실행.
-COPY cloud/runpod/_log_shipper.py /app/_log_shipper.py
+# 공유 파드 인프라(cloud/common): GR00T 설치 스크립트 · modality config · Discord 유틸 · stdout 시퍼
+COPY cloud/common/bootstrap.sh /app/bootstrap.sh
+COPY cloud/common/new_embodiment_config.py /app/new_embodiment_config.py
+COPY cloud/common/utils/ /app/utils/
+COPY cloud/common/_log_shipper.py /app/_log_shipper.py
 
 ENTRYPOINT ["bash", "/app/entrypoint.sh"]
 CMD []

@@ -20,7 +20,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_ROOT))
-sys.path.insert(0, str(_ROOT / "cloud" / "runpod"))  # utils.discord
+sys.path.insert(0, str(_ROOT / "cloud" / "common"))  # utils.discord
 from scripts.env_config import load_env  # noqa: E402
 
 try:
