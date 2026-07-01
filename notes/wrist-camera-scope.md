@@ -112,8 +112,8 @@ h5_to_lerobot(쓰기)·new_embodiment_config(학습)·_wsl_gr00t_eval(평가)이
      불필요, 팔 동일). 출력 sidecar 에 robot_uids 기록(`_stamp_robot_uids`).
    - task_to_h5 는 **불필요** — 액션은 로봇무관(팔 동일)이라 panda 궤적을 그대로 재사용.
 5. ✅ WSL IK 재현 확인 (panda_v3 + ee_verify) — **통과** (아래 결과)
-6. ⬜ (승인 후) 데이터 재생성 + 새 버전 push — 무과금이나 시간
-7. ⬜ (승인 후) 재학습 — **과금**
+6. ✅ 데이터 재생성 + 새 버전 push — HF `maniskill-threecubes-lerobot@v2` (1000ep, 2캠)
+7. ✅ 재학습 2회 — `@v2-s3000`(eval 0.48)·`@v2-s20000`(eval 0.54) → **가설 검증됨**(맨 위 결과 표)
 
 ## 검증 결과 (2026-06-29, Windows CPU, 5-ep 스모크)
 

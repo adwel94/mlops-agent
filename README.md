@@ -194,6 +194,42 @@ traj_N/
 
 `obs/extra` 에 들어가는 신호는 **환경이 정한다** (`_get_obs_extra`). 정수 라벨(예: `target_id`)을 쓰는 태스크는 그 정수→문자열 사전이 데이터셋 `.json` 사이드카에 `label_metadata` 로 기록돼, 데이터셋만으로 라벨을 해독할 수 있다.
 
+### GR00T용 LeRobot 출력 (④, `h5_to_lerobot`)
+
+EE 분기(④)는 데이터셋을 GR00T-flavored **LeRobot v2.1** 디렉토리로 변환한다:
+
+```
+data/datasets/<task>/lerobot/
+├── meta/{info.json, episodes.jsonl, tasks.jsonl, modality.json, stats.json}
+├── data/chunk-000/episode_<i:06d>.parquet      # observation.state, action(10d 절대 EEF), 인덱스
+└── videos/chunk-000/observation.images.<cam>/episode_<i:06d>.mp4
+```
+
+- **액션 = 10d 절대 EEF** `[eef_x,y,z, rot6d_0..5, gripper]` (`ActionFormat.XYZ_ROT6D`), **상태 = `[qpos(Q), eef_abs(9)]`**. `action[t]`=다음 스텝 절대 pose, `state[t]`=현재 pose → GR00T가 `rep=RELATIVE`+`state_key="eef"` 로 상대화한다(우리는 절대값을 저장). rot6d는 회전행렬 첫 두 행(GR00T `pose.py` 컨벤션).
+- 프레임 수 N = T−1 (parquet 행수 == mp4 프레임수). 지시문은 `label_metadata` 에서 생성(`--instruction "pick up the {target_id} cube"`). 멀티 카메라면 `videos/.../observation.images.<cam>/` 가 카메라 수만큼.
+- meta 스키마는 Isaac-GR00T 공식 예제(`demo_data/cube_to_bowl_5`)와 정합 확인됨. 학습 전 GR00T env에서 `scripts/repair_lerobot_metadata.py <out> --embodiment-tag <tag>` 로 `stats.json`/`relative_stats.json` 재생성 권장(로더가 `stats.json` 존재를 요구; `relative_stats` 는 EEF 상대 액션 정규화용·선택).
+
+### 다중 카메라 / 손목 카메라 (멀티캠)
+
+파이프라인은 카메라 개수를 **데이터에서 발견**한다 — 어디에도 카메라 이름·개수를 하드코딩하지 않으므로 1캠/멀티캠을 같은 코드로 처리하고, 기존 1캠 데이터셋·모델은 그대로 동작한다(하위호환).
+
+**손목 카메라 데이터셋 만들기** — `h5_add_images` 에 `--robot-uids panda_wristcam` 만 주면 된다. ManiSkill 내장 `PandaWristCam` 로봇이 그리퍼(`camera_link`)에 `hand_camera` 를 자동으로 단다. 팔 운동학은 panda 와 동일하므로 기존 액션 궤적(`motionplanning.h5`)을 그대로 리플레이하며 손목 이미지만 추가로 기록한다(WSL 재생성 불필요). 쓴 로봇은 출력 사이드카(`env_info.robot_uids`)에 기록돼 하류(`h5_to_lerobot`/`gr00t_eval`/`ee_verify`)가 같은 카메라 세트로 env 를 구성한다.
+
+```cmd
+:: 손목캠 데이터셋 생성 (base_camera + hand_camera 2캠) — 별도 stem 으로 1캠 데이터셋 보존
+copy data\datasets\ThreeColoredCubes-v1\motionplanning.h5 data\datasets\ThreeColoredCubes-v1\motionplanning_wristcam.h5
+copy data\datasets\ThreeColoredCubes-v1\motionplanning.json data\datasets\ThreeColoredCubes-v1\motionplanning_wristcam.json
+python scripts\h5_add_images.py --task ThreeColoredCubes-v1 --traj-path data\datasets\ThreeColoredCubes-v1\motionplanning_wristcam.h5 --count 1000 --robot-uids panda_wristcam
+
+:: LeRobot 변환 — 데이터의 모든 카메라를 자동 포장 (각 카메라가 observation.images.<cam>/ 로)
+::   특정 카메라만 쓰려면 --camera base_camera 또는 --cameras base_camera,hand_camera
+python scripts\h5_to_lerobot.py --traj-path data\datasets\ThreeColoredCubes-v1\motionplanning_wristcam.rgb.pd_joint_pos.physx_cpu.h5 --instruction "pick up the {target_id} cube"
+```
+
+- `h5_to_lerobot` 는 발견한 카메라마다 `videos/.../observation.images.<cam>/` 와 `modality.json` video 키를 만든다(기본 = 전체; `--camera`/`--cameras` 로 override). `info.json` 의 `total_videos = 에피소드 × 카메라 수`.
+- 학습(`new_embodiment_config.py`)·평가(`_wsl_gr00t_eval.py`)는 데이터셋 `meta/modality.json` 의 video 키에서 카메라 세트를 읽어 그대로 따른다 — 학습 이미지나 평가 코드를 캠 수에 맞춰 고칠 필요 없다.
+- **체크포인트는 카메라 수가 고정**(비전 인코더+projector가 그 입력으로 굳음) — 1캠 모델은 2캠 입력을 못 먹고 반대도 안 됨. 그래서 캠 구성이 다르면 **HF 태그로 분리**한다(예: 데이터셋 `v1`=1캠, `v2`=손목캠 2캠). 손목캠 도입의 설계·검증·성공률 비교는 `notes/wrist-camera-scope.md`.
+
 ## 출력 파일 명명 규칙
 
 ```
@@ -227,3 +263,4 @@ data/datasets/<task>/<source-stem>.<obs>.<control>.<sim>.h5    # h5_add_images (
 - 멀티오브젝트/언어 지시형 빌트인 태스크(PickClutterYCB 등)는 모션플래닝 솔루션 미제공 → 솔루션 직접 작성 필요.
 - 텔레오퍼레이션(직접 조작)과 라이브 EE 공간 컨트롤 모드는 미지원 — `pinocchio` 의존성 필요한데 현재 환경에 미설치. (GR00T용 EE 데이터셋은 `pinocchio` 없이 오프라인 변환 + WSL mplib IK로 생성 — `ee_verify`/`h5_to_lerobot`.)
 - 학습·서빙·평가(⑤)는 **외부 GPU(RunPod) 위에서** 돈다 — 로컬 GPU로는 GR00T-3B 파인튜닝이 불가하므로 클라우드 스킬(`gr00t_train`/`gr00t_serve`/`gr00t_eval`)로 분리. 실제 자원을 켜는 과금 작업이라 명시 요청 시에만 실행하고 끝나면 `/runpod_down`. `h5_to_lerobot` 출력은 GR00T-flavored LeRobot v2.1 스펙(Isaac-GR00T 공식 예제 `cube_to_bowl_5`와 meta 정합, 액션=절대 EEF xyz+rot6d)을 직접 작성한 것 — 학습 전 GR00T env에서 `scripts/repair_lerobot_metadata.py <out> --embodiment-tag <tag>` 로 `stats.json`/`relative_stats.json`(EEF 상대 액션 정규화)을 재생성하는 것을 권장.
+- **RunPod community 호스트가 간헐적으로 `CUDA unknown error`(GPU 붙어 있는데 torch가 못 잡음, devices=0)로 serve/train 기동에 실패**한다. `serve_policy.sh` 에 재시도 루프(fresh process)가 있어 *일시적* 결함은 자동 회복하지만, **호스트 GPU 영구 결함**이면 재시도로 안 풀린다 — 게다가 community 스케줄러가 같은 불량 호스트(같은 publicIp)를 반복 배정할 수 있다. 이때는 파드를 종료하고 **`--cloud-type SECURE`** (다른 호스트 풀)로 다시 띄운다. 파드 생성 직후 `publicIp` 가 직전 불량 호스트와 같으면 부팅 완료를 기다리지 말고 즉시 종료해 과금을 아낀다.
