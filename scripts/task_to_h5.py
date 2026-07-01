@@ -122,6 +122,8 @@ def run(
 
     proc = subprocess.run(
         ["wsl.exe", "-d", WSL_DISTRO, "--", "bash", "-lc", bash_cmd],
+        # WSL emits UTF-8 (tqdm bars etc.); decoding as Windows' default cp949 would
+        # mojibake/crash. errors='replace' keeps non-decodable bytes from raising.
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:

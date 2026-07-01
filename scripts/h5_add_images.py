@@ -291,5 +291,8 @@ def _cli() -> None:
     print(f"\nGenerated dataset -> {out}")
 
 
+# Guard required: Windows uses `spawn` for multiprocessing (the image workers), which
+# re-imports this module in each child. Without the guard the child would re-run _cli()
+# and spawn its own children → infinite process explosion.
 if __name__ == "__main__":
     _cli()

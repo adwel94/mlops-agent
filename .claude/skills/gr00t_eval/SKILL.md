@@ -51,6 +51,15 @@ ManiSkill env 생성 → 에피소드 seed로 reset
 - **과금**: 평가 실행 자체는 로컬 WSL(무과금)이나, 전제인 정책 서버는 과금 GPU 파드다. 평가 끝나면 `/runpod_ls` 확인 후 `/runpod_down`.
 - 시뮬만 돌고 파일은 안 만든다 (순수 평가).
 
+## 모니터링·폴링
+
+평가 실행 자체는 무과금(로컬 WSL)이나 **떠 있는 정책 서버(5555)에 의존**한다.
+
+- `--server-host`/`--server-port` 는 serve 파드의 `runpod_client.pod().portMappings` 에서 얻는다
+  (`runpod_ls` 는 포트 안 보여줌).
+- serve 준비 전엔 `client.ping()` 이 fail-fast — 5555 가 열렸는지(TCP connect/ping) 확인한 뒤
+  롤아웃을 시작한다. serve 부팅 폴링은 `/gr00t_serve` "모니터링·폴링" 참조.
+
 ## 예시
 
 | 사용자 입력 | 결과 |

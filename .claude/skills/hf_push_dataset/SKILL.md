@@ -53,6 +53,28 @@ HF repo 를 `list_repo_files` 로 조회하고 `meta/info.json`·`meta/tasks.jso
 | `/hf_push_dataset - adwel94/maniskill-threecubes-lerobot --verify-only` | 업로드 없이 기존 repo 점검 |
 | `/hf_push_dataset <DIR> <repo_id> --private` | private repo 로 업로드 |
 
-**버전 컨벤션**: 태스크당 repo 하나(`maniskill-<slug>-lerobot`), 버전은 `--version vN` 불변 git 태그로 쌓는다. 데이터가 바뀌면 새 번호(같은 태그 재사용 = 에러). 학습은 `--hf-dataset-repo <repo>@v1` 로 받아 모델 태그 `v1-s<steps>` 를 자동 도출. 자세한 규칙은 `CLAUDE.md` 의 "HF 명명·버전 컨벤션".
+## HF 명명·버전 정책 (단일 출처)
+
+반복 재학습/재생성이 repo 를 증식(`-ft2`,`-final`)시키거나 덮어쓰기로 과거를 지우는 걸
+막는다: **태스크당 repo 하나 + git 태그로 버전** (HF=git 이라 스냅샷이 공짜).
+
+```
+데이터셋  adwel94/maniskill-<slug>-lerobot   tag v1, v2 ...                       (생성방식 바뀌면 새 태그·불변)
+모델      adwel94/gr00t-<slug>               main + tag <ds_ver>-s<steps>[-full]  (예: v1-s3000)
+```
+
+- **HF 태그가 버전 진실, 로컬은 작업 사본** — `data/` 는 gitignore+재생성 가능 → 로컬엔
+  최신 빌드 하나만. 모델은 로컬에 없음(파드→HF 직행).
+- **버전 단일 출처 = `MANIFEST.yaml`**(커밋됨) — 어떤 버전이 어디 있고 eval 이 얼마인지 잇는 지도.
+- **태그는 불변** — `--version v1` 중복이면 **에러**(덮어쓰지 않음; 바뀌었으면 새 번호).
+  모델 태그 충돌은 경고만(main 갱신).
+- **자동 기록** — `hf_push_dataset --version`→`add_dataset`, `launch_train`→`add_model`(eval=null).
+  모델 eval 은 평가 후 수동 `python scripts/manifest.py set-eval <slug> <model> <값>`.
+- **slug** = `maniskill-<slug>-lerobot` 에서 추출 → push/train 이 같은 dataset repo 를 알아 MANIFEST 키 일치.
+- **학습 이미지는 코드를 담지 데이터를 담지 않는다** — 파드 코드를 빌드 시 굽는다(한 이미지가
+  1캠·멀티캠 데이터셋 다 학습). **코드가 바뀔 때만** 재빌드. 태그 `:latest`(launch_train 기본)
+  + `:git-<sha>`(불변 추적), `add_model` 이 MANIFEST 모델 항목 `image` 필드에 기록.
+
+학습은 `--hf-dataset-repo <repo>@v1` 로 받아 모델 태그 `v1-s<steps>` 를 자동 도출.
 
 흐름: `/h5_to_lerobot`(포장) → **`/hf_push_dataset --version vN`(업로드+검증+태그)** → `python cloud/train/launch_train.py --hf-dataset-repo <repo>@vN`(학습 파드 — 부팅 때 이 repo 수신).

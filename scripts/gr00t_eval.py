@@ -44,6 +44,7 @@ def run(
     count: int = 10,
     seed: int = 0,
     max_steps: int = 0,
+    budget_factor: float = 3.0,
     action_steps: int = 16,
     instruction: str | None = None,
     sim_backend: str = "cpu",
@@ -54,7 +55,9 @@ def run(
     `traj_path`'s episodes, in sim via mplib IK, and report success rate.
 
     A random `count` episodes (reproducible via `seed`); `count=0` = all. `max_steps=0`
-    uses each recorded episode's length as the step budget. `instruction` is a template
+    uses each recorded episode's length * `budget_factor` (default 3x) as the step budget
+    (the policy is slower per step than the planner, so 1x starves it); `max_steps>0` sets
+    an absolute budget for all episodes. `instruction` is a template
     over the dataset's label_metadata keys (e.g. "pick up the {target_id} cube"); when
     omitted, the decoded label is used (must match what h5_to_lerobot trained on).
     `task` defaults to the sidecar's env_id.
@@ -85,6 +88,7 @@ def run(
         "--count", str(count),
         "--seed", str(seed),
         "--max-steps", str(max_steps),
+        "--budget-factor", str(budget_factor),
         "--action-steps", str(action_steps),
         "--sim-backend", sim_backend,
         "--log-jsonl", f'"{_win_to_wsl(log_jsonl)}"',
@@ -133,7 +137,9 @@ def _cli() -> None:
                    help="random sample size; 0 = all episodes")
     p.add_argument("--seed", type=int, default=0, help="reproducible random sample")
     p.add_argument("--max-steps", type=int, default=0,
-                   help="per-episode step budget; 0 = recorded episode length")
+                   help="absolute per-episode step budget for all eps; 0 = factor-based (see --budget-factor)")
+    p.add_argument("--budget-factor", type=float, default=3.0,
+                   help="when --max-steps=0, budget = recorded episode length * this (default 3x)")
     p.add_argument("--action-steps", type=int, default=16,
                    help="actions executed per replan (<= GR00T action horizon)")
     p.add_argument("--instruction", default=None,
@@ -145,7 +151,8 @@ def _cli() -> None:
     args = p.parse_args()
     run(args.traj_path, server_host=args.server_host, server_port=args.server_port,
         task=args.task, count=args.count, seed=args.seed, max_steps=args.max_steps,
-        action_steps=args.action_steps, instruction=args.instruction,
+        budget_factor=args.budget_factor, action_steps=args.action_steps,
+        instruction=args.instruction,
         sim_backend=args.sim_backend, log_jsonl=args.log_jsonl, verbose=args.verbose)
 
 

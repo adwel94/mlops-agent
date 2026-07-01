@@ -147,7 +147,8 @@ def main():
     p.add_argument("--server-port", type=int, default=5555)
     p.add_argument("--count", type=int, default=10)   # 0 = all; else random sample
     p.add_argument("--seed", type=int, default=0)     # reproducible random sample
-    p.add_argument("--max-steps", type=int, default=0)   # 0 = recorded episode length
+    p.add_argument("--max-steps", type=int, default=0)   # >0 = absolute budget (all eps); 0 = factor-based
+    p.add_argument("--budget-factor", type=float, default=3.0)  # budget = recorded_len * factor (when max-steps=0)
     p.add_argument("--action-steps", type=int, default=16)  # executed per replan (<= horizon)
     p.add_argument("--instruction", default=None)     # template over label_metadata keys
     p.add_argument("--sim-backend", default="cpu")
@@ -201,7 +202,10 @@ def main():
         orig_succ += bool(np.asarray(ep["success"])[-1])
         instr = _instruction(ep, label_md, args.instruction, env_id)
         seed = eps_meta[i].get("episode_seed", i) if i < len(eps_meta) else i
-        budget = args.max_steps or int(ep["actions"].shape[0])
+        # step budget: the policy is slower per step than the motion planner, so using the
+        # recorded planner length as-is (1x) starves capable episodes at timeout. Default =
+        # recorded_len * budget_factor (3x). --max-steps sets an absolute budget for ALL eps.
+        budget = args.max_steps or int(int(ep["actions"].shape[0]) * args.budget_factor)
 
         obs, _ = env.reset(seed=seed)
         # env target after the seeded reset (cross-check vs the recorded label)
