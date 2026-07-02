@@ -99,15 +99,25 @@ def run(
     if verbose:
         print(f"[gr00t_eval] WSL command:\n  {bash_cmd}\n")
 
-    proc = subprocess.run(
+    # A2: stream the WSL output live (per-episode [ep] lines flush through) instead of
+    # capturing silently — running-vs-stalled is visible in real time. stderr is merged
+    # so the tqdm bar streams too. The full text is still accumulated to parse DONE.
+    proc = subprocess.Popen(
         ["wsl.exe", "-d", WSL_DISTRO, "--", "bash", "-lc", bash_cmd],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace", bufsize=1,
     )
-    out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    lines: list[str] = []
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        sys.stdout.flush()
+        lines.append(line)
+    proc.wait()
+    out = "".join(lines)
     if proc.returncode != 0:
         raise RuntimeError(
             f"[gr00t_eval] WSL execution failed (exit {proc.returncode}).\n"
-            f"--- stderr tail ---\n{proc.stderr[-2000:]}\n"
+            f"--- output tail ---\n{out[-2000:]}\n"
             f"Check: WSL env has pyzmq/msgpack/msgpack-numpy, and the policy server "
             f"is reachable at {server_host}:{server_port}."
         )

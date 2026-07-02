@@ -18,6 +18,7 @@ import argparse
 import json
 import random
 import sys
+import time
 
 PROJECT_ROOT = "/mnt/c/Users/hun41/PycharmProjects/maniskill"
 sys.path.insert(0, PROJECT_ROOT)
@@ -32,6 +33,24 @@ from tqdm import tqdm
 from scripts.ee_convert import episode_to_abs_eef, rot6d_to_quat
 from scripts.ik_exec import np1, make_env_and_solver, solve_to_arm
 from scripts.h5_to_lerobot import select_cameras  # single source for the camera contract
+
+# B4: optional Discord progress (parity with training) — no-op if webhook/deps absent.
+_DISCORD = False
+try:
+    sys.path.insert(0, PROJECT_ROOT + "/cloud/common")
+    from scripts.env_config import load_env as _load_env
+    _load_env()
+    from utils.discord import (send_discord, send_progress_notification,  # noqa: E402
+                               DiscordChannel)
+    _DISCORD = True
+except Exception:
+    def send_discord(*a, **k):
+        pass
+
+    def send_progress_notification(*a, **k):
+        pass
+
+    DiscordChannel = None
 
 
 # ---- minimal GR00T PolicyClient (get_action / ping path only) ---------------
@@ -195,6 +214,15 @@ def main():
     orig_succ = pol_succ = ik_fail_total = 0
     n_anypick = n_picked_tgt = 0     # diagnostic: manipulation vs color-grounding
     records = []
+    n = len(keys)
+    # A1: stream per-episode records to disk as they finish (progress is visible and
+    # partial results survive a kill) instead of one bulk write at the very end.
+    lf = open(args.log_jsonl, "w") if args.log_jsonl else None
+    start_time = time.time()
+    report_every = max(1, n // 10)   # ~10 Discord checkpoints over the run
+    if _DISCORD:
+        send_discord(f"🎬 gr00t_eval 시작 — {env_id}: {n} episodes",
+                     channel=DiscordChannel.PIPELINE)
     pbar = tqdm(keys)
     for k in keys:
         i = int(k.split("_")[1])
@@ -222,8 +250,14 @@ def main():
         success = False
         ep_ik_fails = 0
         t = 0
+        ep_t0 = time.time()          # A3: per-episode wall + inference timing
+        ep_infer_s = 0.0
+        ep_infer_n = 0
         while t < budget and not success:
+            _gt0 = time.time()
             action = client.get_action(_build_obs(obs, cams, instr))
+            ep_infer_s += time.time() - _gt0
+            ep_infer_n += 1
             eef = np.asarray(action["eef"])[0]          # (H,9) absolute xyz+rot6d
             grip = np.asarray(action["gripper"])[0]     # (H,1)
             horizon = min(args.action_steps, eef.shape[0])
@@ -284,18 +318,30 @@ def main():
                                       if final_dist is not None else None),
             "miss_vec": miss_vec,   # [dx,dy,dz] = tcp-target; 편향 vs 산포 사후분석용
         })
+        # A1: append this episode's record now + flush (survives a kill).
+        if lf:
+            lf.write(json.dumps(records[-1]) + "\n")
+            lf.flush()
+        # A2/A3: one flushed progress line — running-vs-stalled is now visible, with
+        # inference latency (distinguishes local vs server stall) and wall time.
+        done = len(records)
+        infer_ms = int(1000 * ep_infer_s / max(ep_infer_n, 1))
+        print(f"[ep] {done}/{n} idx={i} seed={seed} success={success} "
+              f"steps={t}/{budget} infer_avg_ms={infer_ms} calls={ep_infer_n} "
+              f"wall={time.time() - ep_t0:.1f}s | running pol={pol_succ}/{done} "
+              f"anypick={n_anypick}/{done}", flush=True)
+        # B4: Discord progress (parity with training) at ~10 checkpoints + last.
+        if _DISCORD and (done % report_every == 0 or done == n):
+            send_progress_notification(f"gr00t_eval {env_id}", done, n, start_time,
+                                       channel=DiscordChannel.PIPELINE)
         pbar.update(1)
         pbar.set_postfix(dict(orig=orig_succ, pol=pol_succ, anypick=n_anypick))
 
     f.close()
     env.close()
     client.close()
-    n = len(keys)
-
-    if args.log_jsonl:
-        with open(args.log_jsonl, "w") as lf:
-            for r in records:
-                lf.write(json.dumps(r) + "\n")
+    if lf:
+        lf.close()
         print(f"[gr00t_eval] per-episode diagnostics -> {args.log_jsonl}")
 
     # color-grounding readout: of episodes where SOME cube was picked, how often
@@ -305,6 +351,11 @@ def main():
           f"policy_success={pol_succ}/{n} success_rate={pol_succ / max(n, 1):.3f} "
           f"ik_fails={ik_fail_total} any_pick={n_anypick}/{n} "
           f"picked_target={n_picked_tgt}/{n} correct_color_rate={color_rate:.3f}")
+    if _DISCORD:
+        send_discord(f"✅ gr00t_eval 완료 — {env_id}: success {pol_succ}/{n} "
+                     f"= {pol_succ / max(n, 1):.1%}, any_pick {n_anypick}/{n}, "
+                     f"{time.time() - start_time:.0f}s",
+                     channel=DiscordChannel.PIPELINE)
 
 
 if __name__ == "__main__":

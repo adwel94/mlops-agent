@@ -53,6 +53,23 @@ else
                 --host "${HOST}" --port "${PORT}")
 fi
 
+# B5: GPU heartbeat — periodically print GPU util/mem so the SERVER side confirms the
+# model is actually computing (util spikes while serving get_action). pod_start's log
+# shipper forwards stdout to the Discord STDOUT channel, so this is visible remotely
+# without touching GR00T's server code. Non-fatal; runs alongside the server.
+GPU_HEARTBEAT_SEC="${GPU_HEARTBEAT_SEC:-30}"
+if command -v nvidia-smi >/dev/null 2>&1; then
+    (
+        while true; do
+            hb=$(nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total \
+                 --format=csv,noheader,nounits 2>/dev/null | head -1)
+            echo "==> [gpu] ${hb}  (util%, usedMiB, totalMiB)"
+            sleep "${GPU_HEARTBEAT_SEC}"
+        done
+    ) &
+    echo "==> GPU heartbeat 시작 (${GPU_HEARTBEAT_SEC}s 간격) — 추론 시 util 상승이 서버측 신호"
+fi
+
 attempt=1
 while [ "${attempt}" -le "${SERVE_RETRIES}" ]; do
     echo "==> serve attempt ${attempt}/${SERVE_RETRIES}"
