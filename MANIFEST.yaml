@@ -42,7 +42,7 @@ threecubes:
       full: false
       repo: adwel94/gr00t-threecubes
       tag: v2-s3000
-      eval: 0.48
+      eval: 0.92
       date: '2026-06-30'
       image: adwel94/maniskill-gr00t-train:git-97d2204
     v2-s20000:
@@ -51,6 +51,23 @@ threecubes:
       full: false
       repo: adwel94/gr00t-threecubes
       tag: v2-s20000
-      eval: 0.54
+      eval: 0.96
       date: '2026-06-30'
       image: adwel94/maniskill-gr00t-train:git-97d2204
+cubeinbowl:
+  datasets:
+    v1:
+      episodes: 988
+      repo: adwel94/maniskill-cubeinbowl-lerobot
+      tag: v1
+      date: '2026-07-02'
+  models:
+    v1-s1000:
+      dataset: v1
+      steps: 1000
+      full: false
+      repo: adwel94/gr00t-cubeinbowl
+      tag: v1-s1000
+      eval: null
+      date: '2026-07-02'
+      image: adwel94/maniskill-gr00t-train:latest

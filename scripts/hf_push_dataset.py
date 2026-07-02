@@ -136,8 +136,13 @@ def run(
     # 버전 태그를 박을 거면 업로드 *전에* 충돌부터 막는다 (불변 원칙 — 새 commit 올리고
     # 나서 태그 막히면 main 만 더럽혀짐). 같은 버전 = 데이터가 같아야 함; 바뀌었으면 새 번호.
     if version:
-        refs = api.list_repo_refs(repo_id, repo_type=repo_type)
-        if version in {t.name for t in refs.tags}:
+        from huggingface_hub.errors import RepositoryNotFoundError
+        try:
+            refs = api.list_repo_refs(repo_id, repo_type=repo_type)
+            existing = {t.name for t in refs.tags}
+        except RepositoryNotFoundError:
+            existing = set()   # 첫 데이터셋 = repo 아직 없음 → 충돌 태그 없음(아래 create_repo 가 만든다)
+        if version in existing:
             raise RuntimeError(
                 f"태그 '{version}' 이 이미 {repo_id} 에 존재 — 버전은 불변입니다. "
                 f"데이터가 바뀌었으면 새 버전 번호를 쓰세요(예: 다음 vN)."
