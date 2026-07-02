@@ -4,6 +4,11 @@
 위한 이행 계획. 지금은 sim+IK 롤아웃이 Windows→WSL 로 우회하는데, WSL 이 필요한 유일한
 이유(mplib 이 Linux 전용)를 Mac 에선 **pinocchio 로 대체**해 WSL 없이 한 env 에서 돌린다.
 
+> **이 문서는 Mac 의 Claude Code 세션이 실행할 스펙이다.** Windows 쪽에서 코드 분석만으로
+> 작성했고 Mac 에서 검증하진 않았다(여기선 mplib·MoltenVK 를 못 돌린다). 아래 파일:라인 참조와
+> §9 검증 게이트를 그대로 실행 근거로 삼되, 실제 API 시그니처(pinocchio·ManiSkill 컨트롤러)는
+> Mac 에서 import 해 확인하며 진행할 것. 착수 순서는 §8 체크리스트.
+
 ## 0. 목표·범위
 
 - **목표** — Mac 에서 `gr00t_eval` 롤아웃을 네이티브로 실행. sim 이 매 스텝 카메라 RGB 를
@@ -62,8 +67,8 @@ action["eef"] (H,9 = xyz+rot6d)  →  rot6d_to_quat  →  world target pose (tp,
   - **단점**: 제어모드가 바뀌면 컨트롤러 내부 보간/PD 로 **실행 동역학이 달라져** 성공률이
     기존 mplib 기반과 어긋날 수 있다 → 전면 재검증 필요. `ee_verify` 게이트의 의미도 재정의.
 
-> 결정 필요: 기본은 **Option B**(파리티·최소변경). B 의 pinocchio IK 수렴/정확도가 `ee_verify`
-> 를 통과 못 하면 A 로 전환. — *이 선택만 확정되면 코드 작업 착수.*
+> **결정: Option B 로 진행**(파리티·최소변경). Mac 세션은 B 로 착수한다. B 의 pinocchio IK 가
+> §9 의 `ee_verify` 파리티 게이트를 통과 못 하면(수렴 실패·정확도 미달) 그때 A 로 전환한다.
 
 ## 3. WSL 오케스트레이션 제거 (Mac = 인프로세스)
 
