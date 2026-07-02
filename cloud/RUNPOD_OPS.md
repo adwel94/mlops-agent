@@ -1,77 +1,43 @@
-# RunPod 운영 규칙 (단일 출처)
+# RunPod 운영 규칙
 
-학습·평가로 RunPod GPU 파드를 띄우는 모든 스킬(`gr00t_train` · `gr00t_serve` ·
-`gr00t_eval`)이 따르는 **공통 규칙**. 각 스킬 문서는 이 파일을 **참조만** 하고 규칙을
-복제하지 않는다 — 규칙이 바뀌면 여기 한 곳만 고친다(스킬엔 고유 신호만 남긴다).
+학습·평가로 RunPod GPU 를 사용할 때 읽어봐야 될 규칙.
 
-> 과금 파드다. 명시 요청 시에만 띄우고, 끝나면 반드시 종료(§4).
+> 과금 파드다. 명시 요청 시에만 띄우고, 끝나면 반드시 종료.
 
-## 관측 지점 (채널·대시보드)
+## 관측 — 이 스크립트로 상태를 본다
 
-런 중 무엇을 어디서 보나. 대부분 파드가 push 하고(에이전트는 읽기만), `#ai-리포팅` 만
-에이전트가 쓴다. Discord **채널 정의의 원천은 코드** — `cloud/common/utils/discord.py` 의
-`DiscordChannel` enum(정의를 여기 복제하지 않는다).
+| 스크립트 | 볼 수 있는 것 |
+|---|---|
+| `cloud/common/read_logs.py` | 파드 raw stdout (부팅·다운로드·기동·에러) |
+| `cloud/train/wandb_status.py` | 학습 loss/lr 등 지표 |
+| `cloud/common/ai_report.py "msg"` | #ai-리포팅 채널로 내가 리포트를 보냄 |
+| BOOT_TIMING 채널 | 부팅 단계별 소요 — "부트스트랩 왜 느리지" 과거와 비교 (`read_logs.py --webhook`) |
 
-| 표면 | 무엇을 보나 | 에이전트가 읽는 법 | train / serve |
-|---|---|---|---|
-| **W&B** | loss/lr 곡선(실시간) | `cloud/train/wandb_status.py`(수치) | train |
-| **PIPELINE** | 학습 시작·N스텝 진행바·완료·업로드·실패 | Discord 채널(사람) | train |
-| **STDOUT** | 파드 raw stdout(부팅~fetch~기동~실패) | `cloud/train/read_logs.py`(봇 토큰) | train·serve |
-| **RUNPOD** | 파드/과금 — 생성·자가종료·종료실패 경보 | Discord 채널(사람) | train·serve |
-| **#ai-리포팅** | AI 자연어 추세 리포트 | `cloud/train/ai_report.py "msg"` 로 **에이전트가 push** | train·(serve) |
-| **BOOT_TIMING** | 부팅 계측 BOOT_PROFILE 한 줄 | Discord 채널(비교용) | train·serve |
-| **Prefect** | flow/task 상태·재시도·이력 | Prefect Cloud | train |
+PIPELINE·RUNPOD 채널은 파드가 Discord 에 올린다(사람이 봄).
 
-- **학습 중**: 지표=**W&B**(`wandb_status.py` 로 수치를 prose 에), 진행/실패=**STDOUT**
-  (`read_logs.py`)+**PIPELINE**, 파드 생사·과금=**RUNPOD**. 부팅 로그 검증(§1)도 STDOUT 으로.
-- **서빙/평가 중**: serve 는 W&B·PIPELINE 없음 — **STDOUT**(`read_logs.py`)으로 부팅·모델
-  fetch·5555 기동을 본다.
+## 폴링
 
-## 폴링 방식 (공통 메커니즘)
+파드 상태는 자동 알림이 없어 직접 확인한다. `Bash` `run_in_background` 로
+`sleep <N> && <확인>` 을 돌려 알림으로 결과를 받고 다음 수를 정한다. 한 턴에 한 번,
+포그라운드 `sleep` 금지.
 
-파드 상태는 하네스가 못 추적하는 외부 상태 — 자동 알림이 없으니 직접 폴링한다.
+## 부팅 확인 (5분 간격)
 
-- `Bash` `run_in_background` 로 `sleep <N> && <확인>` → task-notification 으로 결과를 읽고
-  다음 수를 판정한다. **일회성**(sleep 1 → 확인 1 → 판정), 턴 기반.
-- **포그라운드 `sleep` 금지**(막힘), **루프 데몬 금지**(한 턴에 한 번만).
-- 확인 도구: `runpod_client.pod(id)`(상태·IP·포트), `cloud/train/read_logs.py`(파드 stdout),
-  `cloud/train/wandb_status.py`(학습 지표), `cloud/runpod/runpod_ls.py`(목록).
+- **불량 호스트** — 생성 직후 `publicIp` 가 `notes/cloud-ops-log.md` 의 불량 호스트면 즉시
+  종료 후 `--cloud-type SECURE` 로 재기동.
+- **준비 신호** — `RUNNING` 은 아직 아님(다운로드·GPU 로드 남음). serve=5555 바인딩,
+  train=지표·로그가 학습 단계로 진행.
+- **받은 것 대조** — `read_logs.py` 로 fetch 로그를 보고 의도한 걸 받았는지 확인.
+  예: 모델 다운로드 로그의 `@<revision>` 이 원한 태그인가(`@main` 이면 종료).
 
-## 1. 부트스트랩 확인 (5분 주기)
+## 진행 리포팅 (20분 이하 간격)
 
-파드를 띄우면 부팅이 제대로 진행되는지 **5분 단위**로 확인한다.
+돌아가는 동안 `ai_report.py` 로 #ai-리포팅 에 추세를 남긴다. 시작·변화·완료·이상은 필수, 도배 금지.
 
-- **불량 호스트 조기 감지** — 생성 직후 `publicIp` 확인. `notes/cloud-ops-log.md` 의 불량
-  호스트(`CUDA unknown error` 유발)와 같으면 부팅 완료를 기다리지 말고 즉시 `/runpod_down`
-  후 `--cloud-type SECURE` 로 재기동(같은 community 풀은 또 그 호스트에 걸린다).
-- **준비 신호** — 컨테이너 `RUNNING` 은 준비가 아니다(설치·다운로드·GPU 로드가 남음).
-  - serve: **5555/tcp 바인딩**(TCP connect 또는 `PolicyClient.ping` 성공)
-  - train: wandb 지표·`read_logs.py` 로그가 학습 단계로 진행
-- ★ **부팅 로그 검증 — "받겠다고 한 것"과 "로그가 받은 것"을 대조** (2026-07-01 사건 규칙).
-  `read_logs.py` 로 파드 stdout 을 보고 fetch 로그가 의도한 대상을 받았는지 확인한다:
-  - 모델: `==> HF model download: <repo>@<revision>` 의 revision 이 **기대 태그인가?**
-    특정 태그를 의도했는데 `@main` 이면 불일치 → **즉시 종료**(잘못된 체크포인트 평가 낭비
-    방지). 근거: `--revision v2-s3000` 이 `@main` 으로 받힌 사건(→ `notes/cloud-ops-log.md`).
-  - 데이터셋·이미지도 같은 원리로 대조.
+## 연결
 
-## 2. 진행 리포팅·폴링 (최대 20분 주기, 필요시 더 짧게)
+`publicIp` + 5555 매핑 포트 = `runpod_client.pod(pod_id)`. (`runpod_ls` 는 포트 안 보임.)
 
-학습·평가 파이프라인이 도는 동안 중간중간 확인해 Discord 로 리포팅한다.
+## 종료
 
-- 폴링 간격 **≤ 20분**, stall·이상 의심 시 더 짧게. **시작·추세 변화·완료·이상은 필수** 리포트.
-- **AI 리포트는 `#ai-리포팅` 채널로만** (`cloud/train/ai_report.py "msg"`). 숫자는
-  `wandb_status.py` 로 prose 에 녹인다. 파드가 직접 push 하는 채널(PIPELINE 진행바 / STDOUT
-  raw)과 분리 — 폴링마다 추세 코멘트 1회 OK, 분 단위 도배 금지.
-
-## 3. 연결 정보 (프로그램으로 획득)
-
-- `publicIp` + `portMappings["5555"]`(매핑된 외부 포트) = `runpod_client.pod(pod_id)`.
-  `runpod_ls` 는 포트를 안 보여주니 그걸로 묻지 말 것. proxy.runpod.net 은 HTTP 전용이라
-  ZMQ(5555)엔 이 직접 TCP 매핑을 쓴다.
-
-## 4. 종료 (과금 차단)
-
-- 완료·실패·중단 어느 경우든 항상 `/runpod_down <pod_id>`. 파드 kill = 과금 중단 =
-  무과금·가역이라 **승인 없이 자율**(CLAUDE.md 협업 규칙 #2).
-- serve 는 서버가 죽어도 컨테이너를 idle 로 유지(restart-loop=조용한 과금 방지, 디버그 접속) →
-  종료는 위 명령으로 명시적으로.
+완료·실패·중단 어느 때든 `/runpod_down <pod_id>`.

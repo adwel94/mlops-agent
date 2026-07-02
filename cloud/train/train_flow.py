@@ -227,8 +227,7 @@ def request_termination(p: FlowParameters) -> None:
     소멸할 때까지 반복한다. 2번째 시도부터(이후 ~30초마다) RunPod 채널로도 직접 plain 알림
     → Worker가 죽어 있어도 사람이 알고 로컬 runpod_down 으로 수동 종료할 수 있다.
 
-    WORKER_TERMINATE_URL 미설정 시 옛 방식(직접 DELETE)으로 폴백 — Worker 가동을 검증하기
-    전까지 보호 공백을 만들지 않기 위함. Worker 확인 후 이 폴백은 제거한다.
+    WORKER_TERMINATE_URL 미설정 시 직접 DELETE 로 폴백한다.
     """
     pod_id = p.runpod_pod_id
     if not pod_id:

@@ -7,8 +7,8 @@
 전제: 봇이 해당 서버 멤버이고 그 채널에 **View Channel + Read Message History** 권한.
       채널 ID 는 STDOUT_WEBHOOK_URL 을 GET 해 자동 추출(별도 env 불필요).
 
-  - CLI:  python cloud/train/read_logs.py [--limit 80]
-          python cloud/train/read_logs.py --webhook <URL> --limit 200
+  - CLI:  python cloud/common/read_logs.py [--limit 80]
+          python cloud/common/read_logs.py --webhook <URL> --limit 200
 """
 from __future__ import annotations
 

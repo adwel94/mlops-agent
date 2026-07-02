@@ -9,8 +9,8 @@
 
 전제: `.env` 의 `AI_REPORTING_WEBHOOK_URL`.
 
-  - CLI: python cloud/train/ai_report.py "학습 순항 중 — loss 0.10 평탄화, ~2h 뒤 완료 예정"
-         echo "여러 줄\n리포트" | python cloud/train/ai_report.py -
+  - CLI: python cloud/common/ai_report.py "학습 순항 중 — loss 0.10 평탄화, ~2h 뒤 완료 예정"
+         echo "여러 줄\n리포트" | python cloud/common/ai_report.py -
 """
 from __future__ import annotations
 

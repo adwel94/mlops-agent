@@ -1,11 +1,5 @@
 # runpod-reaper — 파드 종료를 RunPod 밖에서 보장하는 Cloudflare Worker
 
-## 왜
-
-파드가 **자기 자신을 RunPod API로 삭제**하는 건 신뢰할 수 없다 — 파드→RunPod 요청은
-간헐적으로 `403`(데이터센터 공유 egress IP가 RunPod 자체 WAF/레이트리밋에 걸림). **밖에서**
-호출하면 100% 된다. 그래서 모든 종료를 이 상시 가동 Worker로 모은다.
-
 ## 두 기능
 
 1. **크론 reaper (사람 통제)** — 15분마다 파드 목록을 보고 `MAX_AGE_HOURS`(기본 1h)를
@@ -54,8 +48,7 @@ POD_PING_SECRET=<위 wrangler secret 과 동일한 랜덤 문자열>
 ```
 
 `launch_train.py` 가 이 둘을 파드 env 로 넘긴다 (`_SECRET_KEYS`). 파드의 `request_termination`
-이 `WORKER_TERMINATE_URL` 로 핑한다. **미설정 시** 파드는 옛 방식(직접 DELETE)으로 폴백하므로
-보호 공백은 없다 — Worker 를 검증한 뒤 폴백을 제거하면 된다.
+이 `WORKER_TERMINATE_URL` 로 핑한다.
 
 ## 테스트 (파드 없이)
 

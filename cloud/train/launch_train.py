@@ -141,7 +141,7 @@ def run(
     print(
         "\n파드가 부팅 때 스스로: bootstrap → 데이터셋 → repair → 학습 → 체크포인트 업로드 → 자가종료.\n"
         "  - 진행: Discord(PIPELINE 진행바 / STDOUT raw 로그) + W&B + Prefect Cloud\n"
-        "  - 에이전트 모니터링: python cloud/train/read_logs.py  (STDOUT 채널 봇 토큰 조회)\n"
+        "  - 에이전트 모니터링: python cloud/common/read_logs.py  (STDOUT 채널 봇 토큰 조회)\n"
         "  - 실패해도 self_terminate(finally)로 과금 차단. 강제 종료: "
         f"/runpod_down {pod_id}\n"
         + (f"  - 완료 후 체크포인트: https://huggingface.co/{hf_output_repo}\n" if hf_output_repo else
