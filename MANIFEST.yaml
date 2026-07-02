@@ -4,7 +4,9 @@
 # 번호를 쓴다(같은 태그에 덮어쓰지 않음).
 # 자동 append: hf_push_dataset.py(데이터셋) / launch_train.py(모델, eval=null 로 시작).
 # 모델 eval 은 gr00t_eval 후 기록: python scripts/manifest.py set-eval <task> <model> <값>
+# env_id: 태스크 키 → 시뮬 환경 ID (gr00t_play 가 모델 좌표만으로 환경을 구축하는 근거).
 threecubes:
+  env_id: ThreeColoredCubes-v1
   datasets:
     v1:
       episodes: 1000
@@ -55,6 +57,7 @@ threecubes:
       date: '2026-06-30'
       image: adwel94/maniskill-gr00t-train:git-97d2204
 cubeinbowl:
+  env_id: ColoredCubeInBowl-v1
   datasets:
     v1:
       episodes: 988
