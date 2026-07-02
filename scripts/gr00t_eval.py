@@ -26,6 +26,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+# A2 라이브 스트리밍은 WSL child 의 출력(=tqdm 진행바의 부분블록 문자 ▏▏ 등)을 그대로
+# Windows stdout 에 되쓴다. Windows 콘솔 기본 cp949 는 이 유니코드를 못 뱉어 UnicodeEncodeError
+# 로 eval 전체가 죽는다 → utf-8 + errors=replace 로 재설정해 관측 코드가 실행을 깨지 않게 한다.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 try:
     from scripts.task_to_h5 import WSL_DISTRO, WSL_PYTHON, WSL_VK_ICD, _win_to_wsl
 except ImportError:  # run as a script: put project root on path

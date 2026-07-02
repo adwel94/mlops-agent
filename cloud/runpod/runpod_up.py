@@ -76,7 +76,11 @@ def _build_env(
     #   HF_TOKEN                — private HF repo·gated 모델 다운로드
     #   STDOUT_WEBHOOK_URL      — stdout 시퍼가 Discord STDOUT 채널로 로그 전송(원격 디버깅)
     #   BOOT_TIMING_WEBHOOK_URL — bootstrap 완료 시 BOOT_PROFILE 계측 한 줄(파싱용) 전송
-    for k in ("HF_TOKEN", "STDOUT_WEBHOOK_URL", "BOOT_TIMING_WEBHOOK_URL"):
+    #   PIPELINE_WEBHOOK_URL    — 파드가 파이프라인 마일스톤(부팅·모델준비·serve ready·실패)을
+    #                             PIPELINE 채널에 남김(학습 파드와 대칭). notify.py 가 읽어 씀.
+    #   RUNPOD_WEBHOOK_URL      — 인프라/과금 이벤트(향후 확장용)
+    for k in ("HF_TOKEN", "STDOUT_WEBHOOK_URL", "BOOT_TIMING_WEBHOOK_URL",
+              "PIPELINE_WEBHOOK_URL", "RUNPOD_WEBHOOK_URL"):
         v = os.getenv(k)
         if v:
             env[k] = v

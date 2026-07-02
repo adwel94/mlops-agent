@@ -27,6 +27,15 @@ fi
 
 echo "==> [pod_start] MODE=${MODE:-idle} HF_DATASET=${HF_DATASET:-<none>} HF_MODEL=${HF_MODEL:-<none>} SERVE_BASE=${SERVE_BASE:-0}"
 
+# 파이프라인 마일스톤 — 학습 파드(train_flow)가 PIPELINE 채널에 상세 로깅하듯, serve 파드도
+# 부팅·모델준비·ready·실패를 PIPELINE 에 pod_id 와 함께 남긴다. STDOUT(raw·파드간 누적)과 달리
+# pod_id 로 구분돼 "이 파드가 준비됐나"를 잔상 없이 판단할 수 있다. notify 는 웹훅 없거나
+# 실패해도 조용히 무시(관측≠게이트).
+_POD="${RUNPOD_POD_ID:-?}"
+notify() { python3 "${HERE}/notify.py" "$1" --channel pipeline || true; }
+
+notify "🚀 *[serve] 파드 부팅* pod=\`${_POD}\` MODE=\`${MODE:-idle}\` model=\`${HF_MODEL:-<none>}@${HF_MODEL_REVISION:-main}\`"
+
 # 1) 베이스 서비스(ssh/jupyter) — RunPod 기본 start 스크립트가 있으면 백그라운드로.
 #    (디버그용. happy-path 는 SSH 불필요 — 평가 롤아웃은 5555/tcp 만 씀.)
 if [ -f /start.sh ]; then
@@ -36,6 +45,7 @@ fi
 
 # 2) 패키지 설치 (멱등 — 재부팅/재시작에도 안전)
 bash "${HERE}/bootstrap.sh"
+notify "📦 *[serve] bootstrap 완료* pod=\`${_POD}\` — 의존성 설치 끝, 모델 다운로드로"
 
 # 3) 데이터셋 — HF_DATASET 지정 시 HF Hub 에서 /workspace/lerobot 로
 if [ -n "${HF_DATASET:-}" ]; then
@@ -51,6 +61,8 @@ if [ -n "${HF_MODEL:-}" ]; then
         MODEL_PATH="$(cat "${_MP_FILE}")"
         export MODEL_PATH
         echo "==> MODEL_PATH=${MODEL_PATH}"
+        # 받은 revision 을 마일스톤에 박아 "의도한 태그를 받았나" 대조를 남긴다(@main 오배포 감지).
+        notify "📥 *[serve] 모델 준비* pod=\`${_POD}\` \`${HF_MODEL}@${HF_MODEL_REVISION:-main}\` → \`${MODEL_PATH}\`"
     fi
 fi
 

@@ -8,12 +8,15 @@
 
 | 스크립트 | 볼 수 있는 것 |
 |---|---|
-| `cloud/common/read_logs.py` | 파드 raw stdout (부팅·다운로드·기동·에러) |
+| `cloud/common/read_logs.py` | 파드 raw stdout (부팅·다운로드·기동·에러). STDOUT 채널은 파드간 누적이라 tail 로 "준비" 판단하면 이전 파드 잔상에 속는다 — 준비는 아래 PIPELINE 마일스톤으로 본다. |
+| `cloud/common/read_logs.py --webhook $PIPELINE_WEBHOOK_URL` | PIPELINE 채널 마일스톤(🚀부팅·📦bootstrap·📥모델준비·🟢serve ready·❌실패). 메시지에 pod_id 가 박혀 있어 **이 파드가 준비됐나**를 잔상 없이 판단하는 정본. |
 | `cloud/train/wandb_status.py` | 학습 loss/lr 등 지표 |
 | `cloud/common/ai_report.py "msg"` | #ai-리포팅 채널로 내가 리포트를 보냄 |
 | BOOT_TIMING 채널 | 부팅 단계별 소요 — "부트스트랩 왜 느리지" 과거와 비교 (`read_logs.py --webhook`) |
 
-PIPELINE·RUNPOD 채널은 파드가 Discord 에 올린다(사람이 봄).
+PIPELINE·RUNPOD 채널은 파드가 올린다 — 사람도 보고, 에이전트도 `read_logs.py --webhook`
+으로 읽는다(train_flow·serve 둘 다 마일스톤을 남긴다). 파드가 마일스톤을 남기려면
+`PIPELINE_WEBHOOK_URL`·`RUNPOD_WEBHOOK_URL` 이 파드 env 로 전달돼야 한다(runpod_up 이 전달).
 
 ## 폴링
 
@@ -27,8 +30,10 @@ PIPELINE·RUNPOD 채널은 파드가 Discord 에 올린다(사람이 봄).
   실패가 확인되면(GPU/드라이버 미탐지, 패키지·flash-attn·uv_sync 설치 실패 등) 즉시 종료하고
   `--cloud-type SECURE` 로 재기동한다. 그 전(부팅·다운로드·GPU 로드·5555 대기)에는 기다린다.
   느리거나 의심스러우면 재기동 대신 `ai_report.py` 로 사람에게 알린다(아래 진행 리포팅).
-- **준비 신호** — `RUNNING` 은 아직 아님(다운로드·GPU 로드 남음). serve=5555 바인딩,
-  train=지표·로그가 학습 단계로 진행.
+- **준비 신호** — `RUNNING` 은 아직 아님(다운로드·GPU 로드 남음). serve 준비 = PIPELINE 의
+  `🟢 [serve] ready pod=<이 파드 id>`(파드가 5555 바인딩을 감지해 남김 — pod_id 로 잔상 없이
+  이 파드만 판단). train=지표·로그가 학습 단계로 진행. STDOUT tail 의 "Server ready" 는 이전
+  파드 잔상일 수 있으니 준비 판단에 쓰지 않는다.
 - **받은 것 대조** — `read_logs.py` 로 fetch 로그를 보고 의도한 걸 받았는지 확인.
   예: 모델 다운로드 로그의 `@<revision>` 이 원한 태그인가(`@main` 이면 종료).
 - **부팅 전략 — 최소 레이어 이미지 + 클라우드 부팅 시 설치.** 가장 가벼운 레이어 이미지

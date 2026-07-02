@@ -25,6 +25,11 @@ export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 
 cd "${GR00T_DIR}"
 
+# 파이프라인 마일스톤(PIPELINE 채널) — pod_start 와 대칭. 웹훅 없거나 실패해도 무시(관측≠게이트).
+_HERE_SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_POD="${RUNPOD_POD_ID:-?}"
+notify() { python3 "${_HERE_SP}/notify.py" "$1" --channel pipeline || true; }
+
 # torch 의 첫 CUDA init 이 간헐적으로 깨짐("CUDA unknown error" → devices=0, nvidia-smi 는
 # 정상). torch 가 그 "0 디바이스"를 프로세스 내에 캐싱하므로 같은 프로세스 재시도는 무의미 →
 # 매번 새 프로세스로 재기동한다. 정상 기동하면 서버가 블로킹(반환 X)이라 루프가 거기서 멈춰
@@ -70,6 +75,31 @@ if command -v nvidia-smi >/dev/null 2>&1; then
     echo "==> GPU heartbeat 시작 (${GPU_HEARTBEAT_SEC}s 간격) — 추론 시 util 상승이 서버측 신호"
 fi
 
+# serve ready 감지 — run_gr00t_server 가 5555 를 바인딩하면(=모델 로드 끝, listen 시작) 그
+# 순간을 PIPELINE 에 pod_id 와 함께 한 번 남긴다. 서버 프로세스는 정상 기동 시 블로킹이라
+# 여기서 직접 못 알리므로, 백그라운드로 localhost:5555 connect 가 열릴 때까지 폴한다. 이게
+# "이 파드가 진짜 준비됐나"의 정본 신호 — STDOUT 잔상 대신 이걸로 판단한다(에이전트도 동일).
+(
+    for _ in $(seq 1 600); do   # 최대 ~30분(3s 간격) 대기
+        if python3 - "$PORT" <<'PY' 2>/dev/null
+import socket, sys
+s = socket.socket(); s.settimeout(2)
+try:
+    s.connect(("127.0.0.1", int(sys.argv[1]))); sys.exit(0)
+except Exception:
+    sys.exit(1)
+finally:
+    s.close()
+PY
+        then
+            notify "🟢 *[serve] ready* pod=\`${_POD}\` port=\`${PORT}\` model=\`${HF_MODEL:-${MODEL_PATH:-?}}@${HF_MODEL_REVISION:-main}\` — 정책 서버 listen 시작"
+            break
+        fi
+        sleep 3
+    done
+) &
+echo "==> serve ready 감지기 시작 (5555 바인딩되면 PIPELINE 에 ready 남김)"
+
 attempt=1
 while [ "${attempt}" -le "${SERVE_RETRIES}" ]; do
     echo "==> serve attempt ${attempt}/${SERVE_RETRIES}"
@@ -83,4 +113,5 @@ while [ "${attempt}" -le "${SERVE_RETRIES}" ]; do
     sleep "${SERVE_RETRY_SLEEP}"
 done
 echo "==> serve ${SERVE_RETRIES}회 모두 실패 — 포기"
+notify "❌ *[serve] 기동 실패* pod=\`${_POD}\` — ${SERVE_RETRIES}회 재시도 모두 실패(5555 미바인딩). 로그 확인·재기동 필요"
 exit 1
