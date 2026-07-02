@@ -1,22 +1,24 @@
-"""WSL-side: verify that 7d EE-delta actions reproduce task success via mplib IK.
+"""Executor: verify that 7d EE-delta actions reproduce task success via per-step IK.
 
 For each episode in a (joint) dataset h5: reset the env to the episode's seed,
 convert its recorded joint trajectory to 7d EE-delta (scripts.ee_convert), then
-execute those deltas open-loop through per-step mplib IK — each step the EE-delta
-is applied to the recorded CURRENT tcp pose, solved to joints via planner.IK, and
+execute those deltas open-loop through per-step IK — each step the EE-delta
+is applied to the recorded CURRENT tcp pose, solved to joints via solve_to_arm, and
 stepped with pd_joint_pos. Reports how often success still reproduces vs the
 trajectory's recorded success.
 
-This is the Path-B method gate (no pinocchio). Runs inside WSL (mplib + llvmpipe
-Vulkan). Invoked by scripts/ee_verify.py. IK plumbing is shared with the GR00T
-policy rollout via scripts/ik_exec.py.
+This is the Path-B method gate. Runs inside WSL on Windows (mplib + llvmpipe
+Vulkan), natively on macOS/Linux (scripts.ik_exec 이 IK 백엔드를 가용성으로 선택).
+Invoked by scripts/ee_verify.py. IK plumbing is shared with the GR00T policy
+rollout via scripts/ik_exec.py.
 """
 import argparse
 import json
 import random
 import sys
+from pathlib import Path
 
-PROJECT_ROOT = "/mnt/c/Users/hun41/PycharmProjects/maniskill"
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 sys.path.insert(0, PROJECT_ROOT)
 
 import numpy as np

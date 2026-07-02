@@ -1,12 +1,14 @@
-"""WSL-side: roll out a GR00T policy in sim and measure task success rate.
+"""Rollout runner: roll out a GR00T policy in sim and measure task success rate.
 
 The policy (GR00T, GPU) runs as a ZMQ server on a remote box (e.g. RunPod); this
-process is the rollout client — it owns the sim + mplib IK and never imports torch.
+process is the rollout client — it owns the sim + IK and never imports torch.
+Runs inside WSL on Windows (mplib), natively on macOS/Linux (scripts.ik_exec 이
+IK 백엔드를 가용성으로 선택).
 Per sampled episode: reset the env to the episode's seed, then closed-loop:
 
     build observation (current rgb + qpos + abs-EEF + language)
       -> policy.get_action  (ZMQ -> server)            # absolute EEF target, 16-step horizon
-      -> rot6d_to_quat -> world target pose -> mplib IK -> arm joints
+      -> rot6d_to_quat -> world target pose -> IK -> arm joints
       -> env.step (pd_joint_pos)                        # execute --action-steps, then replan
     until success or --max-steps.
 
@@ -19,8 +21,9 @@ import json
 import random
 import sys
 import time
+from pathlib import Path
 
-PROJECT_ROOT = "/mnt/c/Users/hun41/PycharmProjects/maniskill"
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 sys.path.insert(0, PROJECT_ROOT)
 
 import numpy as np

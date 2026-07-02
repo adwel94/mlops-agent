@@ -26,6 +26,13 @@
 
 명령 실행에 필요한 운영 사실. (pip 의존성 = `requirements.txt`, 부트스트랩 절차 = SETUP.md.)
 
+**macOS (Apple Silicon)** (소비 파이프라인 + `ee_verify`·`gr00t_eval` 네이티브) — conda env
+`maniskill`, Python `/opt/homebrew/Caskroom/miniconda/base/envs/maniskill/bin/python`.
+시뮬 **CPU 백엔드**, 렌더 **MoltenVK**(Vulkan→Metal; ICD 지정은 `scripts/__init__.py`).
+IK 는 **pinocchio** 네이티브 — WSL 계층 없이 같은 env 인프로세스로 돈다(`scripts/ik_exec.py`
+가 백엔드를 가용성으로 선택). **`task_to_h5` 미지원** — mplib *모션 플래너*(충돌회피
+경로계획) 의존이라 새 궤적 생성은 Windows+WSL 또는 Linux 박스에서 한다.
+
 **Windows** (소비 파이프라인 + task_to_h5 오케스트레이션) — conda env `maniskill`,
 Python `C:\Users\hun41\miniconda3\envs\maniskill\python.exe`. 시뮬·렌더 모두 **CPU 백엔드**.
 pip 의존성은 `requirements.txt`(단일 출처).

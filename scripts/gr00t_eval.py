@@ -1,10 +1,12 @@
-"""Roll out a trained GR00T policy in sim and report task success rate (WSL).
+"""Roll out a trained GR00T policy in sim and report task success rate.
 
 Path-A deployment eval, step ④-eval. The GR00T policy (GPU) runs as a ZMQ server on
-a remote box (RunPod); this Windows-side orchestrator launches the rollout client in
-WSL (scripts/_wsl_gr00t_eval.py — sim + mplib IK, no torch), which connects to that
-server, drives a closed-loop rollout, and reports success rate. Mirrors scripts.ee_verify's
-WSL-invocation pattern.
+a remote box (RunPod); this orchestrator launches the rollout client
+(scripts/_wsl_gr00t_eval.py — sim + IK, no torch), which connects to that server,
+drives a closed-loop rollout, and reports success rate. On Windows the client runs
+inside WSL (mplib IK + lavapipe Vulkan); on macOS/Linux it runs natively in the same
+env (pinocchio IK — scripts.ik_exec picks the backend). Mirrors scripts.ee_verify's
+invocation pattern.
 
 Input is the SOURCE image dataset h5 (h5_add_images output) — not the lerobot dir —
 because the rollout needs each episode's `episode_seed` (to reset the scene) and
@@ -87,32 +89,53 @@ def run(
         log_jsonl = traj_path.parent / (traj_path.stem + ".eval_diag.jsonl")
     log_jsonl = Path(log_jsonl)
 
-    inner = [
-        f"export VK_ICD_FILENAMES={WSL_VK_ICD};", f'"{WSL_PYTHON}"',
-        f'"{_win_to_wsl(WSL_SCRIPT)}"',
-        "--task", task,
-        "--traj-path", f'"{_win_to_wsl(traj_path)}"',
-        "--server-host", server_host,
-        "--server-port", str(server_port),
-        "--count", str(count),
-        "--seed", str(seed),
-        "--max-steps", str(max_steps),
-        "--budget-factor", str(budget_factor),
-        "--action-steps", str(action_steps),
-        "--sim-backend", sim_backend,
-        "--log-jsonl", f'"{_win_to_wsl(log_jsonl)}"',
-    ]
-    if instruction:
-        inner += ["--instruction", f'"{instruction}"']
-    bash_cmd = " ".join(inner)
+    if sys.platform == "win32":
+        # Windows: 러너를 WSL 에서 (mplib + lavapipe Vulkan)
+        inner = [
+            f"export VK_ICD_FILENAMES={WSL_VK_ICD};", f'"{WSL_PYTHON}"',
+            f'"{_win_to_wsl(WSL_SCRIPT)}"',
+            "--task", task,
+            "--traj-path", f'"{_win_to_wsl(traj_path)}"',
+            "--server-host", server_host,
+            "--server-port", str(server_port),
+            "--count", str(count),
+            "--seed", str(seed),
+            "--max-steps", str(max_steps),
+            "--budget-factor", str(budget_factor),
+            "--action-steps", str(action_steps),
+            "--sim-backend", sim_backend,
+            "--log-jsonl", f'"{_win_to_wsl(log_jsonl)}"',
+        ]
+        if instruction:
+            inner += ["--instruction", f'"{instruction}"']
+        cmd = ["wsl.exe", "-d", WSL_DISTRO, "--", "bash", "-lc", " ".join(inner)]
+    else:
+        # macOS/Linux: 같은 env 의 파이썬으로 러너를 직접 실행 (WSL 계층 불필요;
+        # IK 백엔드는 scripts.ik_exec 이 가용성으로 선택)
+        cmd = [
+            sys.executable, str(WSL_SCRIPT),
+            "--task", task,
+            "--traj-path", str(traj_path),
+            "--server-host", server_host,
+            "--server-port", str(server_port),
+            "--count", str(count),
+            "--seed", str(seed),
+            "--max-steps", str(max_steps),
+            "--budget-factor", str(budget_factor),
+            "--action-steps", str(action_steps),
+            "--sim-backend", sim_backend,
+            "--log-jsonl", str(log_jsonl),
+        ]
+        if instruction:
+            cmd += ["--instruction", instruction]
     if verbose:
-        print(f"[gr00t_eval] WSL command:\n  {bash_cmd}\n")
+        print(f"[gr00t_eval] command:\n  {cmd}\n")
 
-    # A2: stream the WSL output live (per-episode [ep] lines flush through) instead of
+    # A2: stream the runner output live (per-episode [ep] lines flush through) instead of
     # capturing silently — running-vs-stalled is visible in real time. stderr is merged
     # so the tqdm bar streams too. The full text is still accumulated to parse DONE.
     proc = subprocess.Popen(
-        ["wsl.exe", "-d", WSL_DISTRO, "--", "bash", "-lc", bash_cmd],
+        cmd,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, encoding="utf-8", errors="replace", bufsize=1,
     )
@@ -125,16 +148,16 @@ def run(
     out = "".join(lines)
     if proc.returncode != 0:
         raise RuntimeError(
-            f"[gr00t_eval] WSL execution failed (exit {proc.returncode}).\n"
+            f"[gr00t_eval] runner execution failed (exit {proc.returncode}).\n"
             f"--- output tail ---\n{out[-2000:]}\n"
-            f"Check: WSL env has pyzmq/msgpack/msgpack-numpy, and the policy server "
+            f"Check: the env has pyzmq/msgpack/msgpack-numpy, and the policy server "
             f"is reachable at {server_host}:{server_port}."
         )
 
     m = re.search(r"DONE gr00t_eval (.+)", out)
     if not m:
         raise RuntimeError(
-            f"[gr00t_eval] WSL run produced no result line.\n"
+            f"[gr00t_eval] runner produced no result line.\n"
             f"--- output tail ---\n{out[-1500:]}"
         )
     line = m.group(1).strip()

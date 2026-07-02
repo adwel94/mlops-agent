@@ -1,10 +1,11 @@
-"""Verify 7d EE-delta actions reproduce task success via mplib IK (WSL).
+"""Verify 7d EE-delta actions reproduce task success via per-step IK.
 
 Path-B EE pipeline, step (b). Converts a dataset's recorded joint trajectory to 7d
-EE-delta (scripts.ee_convert) and replays it through per-step mplib IK in the sim,
-checking that success still reproduces. mplib is Linux-only, so the executor runs
-inside WSL (scripts/_wsl_ee_verify.py); this module is the Windows-side orchestrator
-(mirrors scripts.task_to_h5's WSL-invocation pattern).
+EE-delta (scripts.ee_convert) and replays it through per-step IK in the sim,
+checking that success still reproduces. The executor is scripts/_wsl_ee_verify.py:
+on Windows it runs inside WSL (mplib is Linux-only; mirrors scripts.task_to_h5's
+WSL-invocation pattern), on macOS/Linux it runs natively in the same env
+(pinocchio IK — scripts.ik_exec picks the backend).
 
 Input is the IMAGE dataset h5 (h5_add_images output) — it carries obs/extra/tcp_pose
 which the conversion needs. Reports orig vs EE-execution success (reproduction rate).
@@ -55,35 +56,48 @@ def run(
         meta = json.loads(traj_path.with_suffix(".json").read_text())
         task = meta["env_info"]["env_id"]
 
-    inner = [
-        f"export VK_ICD_FILENAMES={WSL_VK_ICD};", f'"{WSL_PYTHON}"',
-        f'"{_win_to_wsl(WSL_SCRIPT)}"',
-        "--task", task,
-        "--traj-path", f'"{_win_to_wsl(traj_path)}"',
-        "--count", str(count),
-        "--seed", str(seed),
-        "--sim-backend", sim_backend,
-    ]
-    bash_cmd = " ".join(inner)
+    if sys.platform == "win32":
+        # Windows: 실행기를 WSL 에서 (mplib + lavapipe Vulkan)
+        inner = [
+            f"export VK_ICD_FILENAMES={WSL_VK_ICD};", f'"{WSL_PYTHON}"',
+            f'"{_win_to_wsl(WSL_SCRIPT)}"',
+            "--task", task,
+            "--traj-path", f'"{_win_to_wsl(traj_path)}"',
+            "--count", str(count),
+            "--seed", str(seed),
+            "--sim-backend", sim_backend,
+        ]
+        cmd = ["wsl.exe", "-d", WSL_DISTRO, "--", "bash", "-lc", " ".join(inner)]
+    else:
+        # macOS/Linux: 같은 env 의 파이썬으로 실행기를 직접 실행 (WSL 계층 불필요;
+        # IK 백엔드는 scripts.ik_exec 이 가용성으로 선택)
+        cmd = [
+            sys.executable, str(WSL_SCRIPT),
+            "--task", task,
+            "--traj-path", str(traj_path),
+            "--count", str(count),
+            "--seed", str(seed),
+            "--sim-backend", sim_backend,
+        ]
     if verbose:
-        print(f"[ee_verify] WSL command:\n  {bash_cmd}\n")
+        print(f"[ee_verify] command:\n  {cmd}\n")
 
     proc = subprocess.run(
-        ["wsl.exe", "-d", WSL_DISTRO, "--", "bash", "-lc", bash_cmd],
+        cmd,
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     out = (proc.stdout or "") + "\n" + (proc.stderr or "")
     if proc.returncode != 0:
         raise RuntimeError(
-            f"[ee_verify] WSL execution failed (exit {proc.returncode}).\n"
+            f"[ee_verify] runner execution failed (exit {proc.returncode}).\n"
             f"--- stderr tail ---\n{proc.stderr[-2000:]}\n"
-            f"Check the WSL env (see SETUP.md)."
+            f"Check the env (see SETUP.md)."
         )
 
     m = re.search(r"DONE ee_verify (.+)", out)
     if not m:
         raise RuntimeError(
-            f"[ee_verify] WSL run produced no result line.\n"
+            f"[ee_verify] runner produced no result line.\n"
             f"--- output tail ---\n{out[-1500:]}"
         )
     line = m.group(1).strip()

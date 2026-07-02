@@ -104,6 +104,37 @@ def _check_wsl() -> CheckResult:
     return _warn("wsl_mplib", f"{WSL_DISTRO}: import mplib failed", wsl_fix)
 
 
+def _check_ik_backend() -> CheckResult:
+    """IK 백엔드 프로브 (ee_verify·gr00t_eval 용). Windows 는 WSL 의 mplib 를,
+    macOS/Linux 네이티브는 같은 env 의 mplib 또는 pinocchio 를 확인한다
+    (scripts.ik_exec 이 같은 순서의 가용성으로 백엔드를 고른다)."""
+    if sys.platform == "win32":
+        return _check_wsl()
+    try:
+        import mplib  # noqa: F401  (Linux 네이티브)
+        return _ok("ik_backend", "mplib import OK (native)")
+    except ImportError:
+        pass
+    try:
+        import pinocchio
+        return _ok("ik_backend", f"pinocchio {pinocchio.__version__} import OK (native)")
+    except ImportError:
+        return _warn(
+            "ik_backend", "mplib 도 pinocchio 도 import 되지 않음",
+            "conda install -c conda-forge pinocchio — ee_verify·gr00t_eval 에만 필요",
+        )
+
+
+def _check_mac_vulkan_icd() -> CheckResult:
+    """darwin 렌더 전제: sapien 은 Vulkan 로더만 번들 — 드라이버(MoltenVK ICD)는
+    시스템(Homebrew) 것을 쓴다. 경로 지정은 scripts/__init__.py 가 한다."""
+    from scripts import MAC_VK_ICD
+    if Path(MAC_VK_ICD).is_file():
+        return _ok("mac_vulkan_icd", f"MoltenVK ICD: {MAC_VK_ICD}")
+    return _fail("mac_vulkan_icd", f"MoltenVK ICD 없음: {MAC_VK_ICD}",
+                 "brew install molten-vk")
+
+
 def run(fix: bool = False, check_wsl: bool = True) -> dict:
     """Verify the harness env; with fix=True, install the pip layer from requirements.txt.
 
@@ -124,7 +155,7 @@ def run(fix: bool = False, check_wsl: bool = True) -> dict:
             "설치 후에도 누락 — conda env/버전을 SETUP.md 로 점검 (env 자체가 없을 수 있음)"
         checks.append(_fail("core imports", detail, fixmsg))
         if check_wsl:
-            checks.append(_check_wsl())
+            checks.append(_check_ik_backend())
         return {"passed": False, "checks": checks}
 
     import mani_skill, sapien, torch  # noqa: E402  (now known-importable)
@@ -155,10 +186,12 @@ def run(fix: bool = False, check_wsl: bool = True) -> dict:
         checks.append(_fail("env_construct_reset", repr(e),
                             "패키지 손상 가능 — " + fix_hint))
         if check_wsl:
-            checks.append(_check_wsl())
+            checks.append(_check_ik_backend())
         return {"passed": False, "checks": checks}
 
-    # 4) CPU render
+    # 4) CPU render (darwin 은 먼저 MoltenVK ICD 전제부터)
+    if sys.platform == "darwin":
+        checks.append(_check_mac_vulkan_icd())
     try:
         import numpy as np
         env = gym.make("PickCube-v1", num_envs=1, obs_mode="rgb",
@@ -177,9 +210,9 @@ def run(fix: bool = False, check_wsl: bool = True) -> dict:
     except Exception as e:
         checks.append(_fail("cpu_render", repr(e), "패키지/드라이버 점검 — " + fix_hint))
 
-    # 5) WSL mplib layer (optional; only the WSL-driven skills need it)
+    # 5) IK backend (optional; only ee_verify/gr00t_eval/task_to_h5 need it)
     if check_wsl:
-        checks.append(_check_wsl())
+        checks.append(_check_ik_backend())
 
     passed = not any(c["level"] == "fail" for c in checks)
     return {"passed": passed, "checks": checks}

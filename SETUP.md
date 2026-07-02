@@ -40,6 +40,38 @@ cd /mnt/c/Users/hun41/PycharmProjects/maniskill
   (`WSL_DISTRO` / `WSL_PYTHON` / `WSL_VK_ICD`)가 가리킨다. 환경이 다르면 그 상수만 맞추면 된다.
 - 소프트웨어 Vulkan은 lavapipe ICD `/usr/share/vulkan/icd.d/lvp_icd.x86_64.json` 를 쓴다.
 
+## macOS (Apple Silicon — 네이티브 파이프라인)
+
+WSL 없이 한 env 에서 돈다: IK 는 pinocchio(conda-forge), 렌더는 MoltenVK(Vulkan→Metal).
+`task_to_h5`(mplib 모션 플래너 의존)만 예외 — 새 궤적 생성은 Linux/WSL 박스에서 한다.
+
+```bash
+# 1) conda env (osx-arm64, Python 3.10)
+conda create -n maniskill python=3.10 -y
+conda activate maniskill
+
+# 2) IK: pinocchio (conda-forge)
+conda install -n maniskill -c conda-forge pinocchio -y
+
+# 3) 렌더 드라이버: MoltenVK — sapien 은 Vulkan 로더만 번들, ICD 는 시스템 것을 쓴다
+brew install molten-vk
+
+# 4) 나머지 pip 의존성 (darwin 마커로 torch/pyzmq/msgpack 자동 포함, mplib 자동 제외)
+pip install -r requirements.txt
+
+# 5) conda scipy → pip scipy 교체 (2)가 conda-forge scipy 를 딸려 설치하는데, 그 빌드는
+#    conda libomp 를 로드해 pip torch 의 번들 libomp 와 충돌(OMP Error #15)한다.
+pip install --force-reinstall --no-deps scipy
+
+# 6) 검증
+python scripts/check_maniskill_env.py
+```
+
+- MoltenVK ICD 경로(`/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json`)는
+  `scripts/__init__.py` 가 `VK_ICD_FILENAMES` 로 지정한다 (Vulkan 로더는 /opt/homebrew
+  를 검색하지 않는다).
+- IK 백엔드는 `scripts/ik_exec.py` 가 가용성으로 고른다: mplib(Linux) → pinocchio(macOS).
+
 ## 클라우드 (⑤ RunPod, 선택)
 
 파인튜닝·서빙·평가는 외부 GPU(RunPod)에서 돈다. 프로젝트 루트 `.env` 에

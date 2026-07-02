@@ -1,4 +1,4 @@
-# ManiSkill 하네스 — pip 의존성 단일 출처 (Windows + WSL, 플랫폼 마커로 분기).
+# ManiSkill 하네스 — pip 의존성 단일 출처 (Windows + WSL + macOS, 플랫폼 마커로 분기).
 #
 #   설치·검증:  python scripts/check_maniskill_env.py --fix   (requirements.txt 를 읽어 설치)
 #   직접:        pip install -r requirements.txt
@@ -11,7 +11,9 @@
 # --- 코어: sim · 렌더 · 데이터셋 (Windows/WSL 공용) ---
 mani_skill==3.0.1
 sapien==3.0.3
-torch==2.12.0+cpu
+# +cpu 로컬 버전 태그는 Linux/Windows 휠에만 존재 — macOS 휠은 접미사 없음.
+torch==2.12.0+cpu; sys_platform != "darwin"
+torch==2.12.0; sys_platform == "darwin"
 gymnasium
 h5py
 pillow
@@ -22,9 +24,10 @@ pyarrow
 imageio
 imageio-ffmpeg
 
-# --- WSL 전용: 모션플래닝/IK · 정책 서버 통신 (task_to_h5 · ee_verify · gr00t_eval) ---
-# mplib 은 Linux 바이너리만 존재 → Windows 에선 마커로 자동 skip.
+# --- 모션플래닝/IK · 정책 서버 통신 (task_to_h5 · ee_verify · gr00t_eval) ---
+# mplib 은 Linux 바이너리만 존재 → Windows/macOS 에선 마커로 자동 skip.
+# macOS 의 IK 는 pinocchio (conda-forge 로 설치 — SETUP.md 참고).
 mplib; sys_platform == "linux"
-pyzmq; sys_platform == "linux"
-msgpack; sys_platform == "linux"
-msgpack-numpy; sys_platform == "linux"
+pyzmq; sys_platform == "linux" or sys_platform == "darwin"
+msgpack; sys_platform == "linux" or sys_platform == "darwin"
+msgpack-numpy; sys_platform == "linux" or sys_platform == "darwin"
