@@ -31,6 +31,9 @@ MANIFEST 좌표 (threecubes/v2-s20000)
    - 없으면 MANIFEST 에서 그 모델의 `repo`/`tag` 를 읽어 **사용자 승인 후**
      `/gr00t_serve <repo> --revision <tag>` 로 띄운다 (과금 시작을 명시).
    - 파드의 5555/tcp 공개 IP:포트는 `runpod_client.pod().portMappings` 로 얻는다.
+   - 파드를 새로 띄우게 되면(스크립트 직접 실행 포함) 생성 전 `cloud/RUNPOD_OPS.md` 를
+     통독한다 — 폴링·준비 판단(준비 = 5555 바인딩, `RUNNING` 은 컨테이너만 뜬 것)·진행
+     리포팅 규칙이 거기 있다.
 3. **실행 명령을 사용자에게 건넨다** — REPL 이 사용자 키보드를 받아야 하므로 AI 가
    백그라운드로 띄우지 않는다. 사용자 터미널에서 실행하도록 한 줄을 출력:
    ```
