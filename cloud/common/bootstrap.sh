@@ -58,6 +58,16 @@ if [ ! -d "${GR00T_DIR}/.git" ]; then
 else
     echo "    이미 존재 — skip"
 fi
+
+# LFS wheel 실물화 — media 는 스킵 유지, wheel 만 받는다.
+# pyproject 의 flash-attn·torchcodec 는 repo 안 번들 wheel 을 path 의존으로 가리킨다
+# (scripts/deployment/**/wheels/*.whl). 이 wheel 들은 LFS 파일이라 위 smudge 스킵으로
+# 포인터 텍스트만 남는데, uv 는 universal resolve 중 마커로 제외될 path(aarch64 wheel)도
+# 메타데이터를 읽으려 zip 을 연다 → 포인터를 zip 으로 열다 "Invalid zip" 으로 resolve 가
+# 통째로 깨진다(우리 x86 은 그 wheel 을 설치조차 안 하지만 메타는 읽는다). 그래서 media
+# (~158MB gif/mp4/parquet)는 계속 스킵하되 wheel(수백MB)만 실물화해 uv resolve 를 살린다.
+echo "==> LFS wheel 실물화 (flash-attn·torchcodec path 의존 — uv resolve 에 필요, media 는 스킵 유지)"
+( cd "${GR00T_DIR}" && git lfs pull --include="scripts/deployment/**/wheels/*.whl" )
 _T_CLONE=$(date +%s)
 
 echo "==> uv sync --python 3.10 (flash-attn 등 GPU 의존성 포함)"
