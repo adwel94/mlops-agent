@@ -21,5 +21,9 @@ COPY cloud/common/new_embodiment_config.py /app/new_embodiment_config.py
 COPY cloud/common/utils/ /app/utils/
 COPY cloud/common/_log_shipper.py /app/_log_shipper.py
 
+# CRLF 방역: Windows 빌드 호스트에서 스크립트가 CRLF 로 체크아웃되면 컨테이너 bash 가
+# 'set: pipefail: invalid option name' 으로 부팅을 통째로 깨뜨린다 → 이미지 안에서 LF 강제.
+RUN sed -i 's/\r$//' /app/*.sh
+
 ENTRYPOINT ["bash", "/app/entrypoint.sh"]
 CMD []

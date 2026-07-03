@@ -22,6 +22,11 @@ WORKDIR /app
 COPY cloud/serve/ /app/
 COPY cloud/common/ /app/
 
+# CRLF 방역: Windows 빌드 호스트에서 git autocrlf 로 스크립트가 CRLF 로 체크아웃되면
+# 컨테이너 bash 가 'set: pipefail: invalid option name' 으로 부팅 스크립트를 통째로
+# 깨뜨린다. 빌드 호스트 줄바꿈과 무관하게 이미지 안에서는 항상 LF 를 보장한다.
+RUN sed -i 's/\r$//' /app/*.sh
+
 # ENTRYPOINT = 부팅 시 자급식 프로비저닝 (설치 → 데이터셋/모델 → MODE 분기로 serve/smoke/idle).
 # 베이스 CMD 를 비워(args 가 스크립트로 안 새게) 우리 스크립트만 PID1 로 돈다.
 ENTRYPOINT ["bash", "/app/pod_start.sh"]
