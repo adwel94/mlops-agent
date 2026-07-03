@@ -14,7 +14,7 @@ BUILDX_FLAGS ?=
 
 # 현재 태그 — 새로 구울 때 여기만 올린다.
 SERVE_TAG ?= 0.5
-TRAIN_TAG ?= 0.2
+TRAIN_TAG ?= 0.3
 
 SERVE_IMAGE := $(REGISTRY)/maniskill-gr00t
 TRAIN_IMAGE := $(REGISTRY)/maniskill-gr00t-train

@@ -5,8 +5,8 @@
 # 여기선 가벼운 스크립트만 COPY.
 #
 # 빌드/푸시 (프로젝트 루트에서, -f 로 이 파일 지정):
-#   docker build -f cloud/train/Dockerfile -t adwel94/maniskill-gr00t-train:0.2 -t adwel94/maniskill-gr00t-train:latest .
-#   docker push adwel94/maniskill-gr00t-train:0.2 && docker push adwel94/maniskill-gr00t-train:latest
+#   docker build -f cloud/train/Dockerfile -t adwel94/maniskill-gr00t-train:0.3 -t adwel94/maniskill-gr00t-train:latest .
+#   docker push adwel94/maniskill-gr00t-train:0.3 && docker push adwel94/maniskill-gr00t-train:latest
 # 실행: python cloud/train/launch_train.py  (env 주입 → 파드가 부팅 때 학습 자급)
 
 FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
