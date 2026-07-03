@@ -32,12 +32,16 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 
-echo "==> Isaac-GR00T clone (shallow, no submodules)"
+echo "==> Isaac-GR00T clone (shallow, no submodules, LFS 스킵)"
 # 서브모듈(LIBERO/SimplerEnv/robocasa)은 GR00T eval 벤치마크용 — 서빙·우리 학습엔 불필요.
 # pyproject 에 external_dependencies 경로 의존성 없음 확인됨 → 빼도 uv sync 정상.
 # --depth 1 로 히스토리도 트림(클론 가속). 서빙·학습 양쪽 부팅 단축.
-# 저속중단+타임아웃+재시도: 나쁜 호스트에서 GitHub 로의 clone 이 무한 hang 하는 걸 막는다
-#   (1KB/s 미만 20초 지속 → git 이 스스로 abort; 그래도 안 끝나면 180초 timeout).
+# LFS 스킵(GIT_LFS_SKIP_SMUDGE): repo 의 LFS 자산(~158MB 데모 미디어 등)은 서빙/학습에
+#   불필요한데, 느린 호스트에서 이 LFS 체크아웃(Filtering content)이 KiB/s 로 기어가
+#   clone 을 통째로 막는다(오늘 관측). 포인터만 받고 blob 은 건너뛴다 → 코드만 받아 빠름.
+# 저속중단+타임아웃+재시도: 그래도 git 전송이 느린 호스트를 대비(1KB/s 미만 20초 → abort,
+#   안 끝나면 180초 timeout, 3회 재시도).
+export GIT_LFS_SKIP_SMUDGE=1
 git config --global http.lowSpeedLimit 1000
 git config --global http.lowSpeedTime 20
 if [ ! -d "${GR00T_DIR}/.git" ]; then
