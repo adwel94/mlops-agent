@@ -178,6 +178,10 @@ def create(
         "gpuTypeIds": [RUNPOD_GPU_MAP[gpu_id]],
         "gpuCount": gpu_count,
         "gpuTypePriority": "availability",
+        # 이미지 베이스가 cuda12.8 → 호스트 드라이버가 CUDA 12.8+ 를 지원해야 컨테이너가
+        # 뜬다. 이 필터가 없으면 낡은 드라이버 호스트에 배치돼 nvidia-container-cli 가
+        # 'cuda>=12.8' 불만족으로 기동을 거부한다(컨테이너 시작 실패 → IP/runtime 안 뜸).
+        "allowedCudaVersions": ["12.8", "12.9"],
         "interruptible": False,
         "locked": False,
         "name": name,
