@@ -7,8 +7,8 @@
 # 부팅 시점)에서 한다 → 이미지 레이어는 수십 KB, 빌드 즉시, arch 정확.
 #
 # 빌드/푸시 (프로젝트 루트에서, -f 로 이 파일 지정):
-#   docker build -f cloud/serve/Dockerfile -t adwel94/maniskill-gr00t:0.3 -t adwel94/maniskill-gr00t:latest .
-#   docker push adwel94/maniskill-gr00t:0.3 && docker push adwel94/maniskill-gr00t:latest
+#   docker build -f cloud/serve/Dockerfile -t adwel94/maniskill-gr00t:0.4 -t adwel94/maniskill-gr00t:latest .
+#   docker push adwel94/maniskill-gr00t:0.4 && docker push adwel94/maniskill-gr00t:latest
 # 사용: /runpod_up (env MODE/HF_DATASET 전달) → 파드가 부팅 때 스스로 설치·서빙 (SSH 불필요).
 
 FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04

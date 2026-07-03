@@ -36,8 +36,21 @@ echo "==> Isaac-GR00T clone (shallow, no submodules)"
 # 서브모듈(LIBERO/SimplerEnv/robocasa)은 GR00T eval 벤치마크용 — 서빙·우리 학습엔 불필요.
 # pyproject 에 external_dependencies 경로 의존성 없음 확인됨 → 빼도 uv sync 정상.
 # --depth 1 로 히스토리도 트림(클론 가속). 서빙·학습 양쪽 부팅 단축.
+# 저속중단+타임아웃+재시도: 나쁜 호스트에서 GitHub 로의 clone 이 무한 hang 하는 걸 막는다
+#   (1KB/s 미만 20초 지속 → git 이 스스로 abort; 그래도 안 끝나면 180초 timeout).
+git config --global http.lowSpeedLimit 1000
+git config --global http.lowSpeedTime 20
 if [ ! -d "${GR00T_DIR}/.git" ]; then
-    git clone --depth 1 https://github.com/NVIDIA/Isaac-GR00T "${GR00T_DIR}"
+    _cloned=0
+    for i in 1 2 3; do
+        if timeout 180 git clone --depth 1 https://github.com/NVIDIA/Isaac-GR00T "${GR00T_DIR}"; then
+            _cloned=1; break
+        fi
+        echo "    clone 시도 ${i} 실패/타임아웃 — 정리 후 재시도"
+        rm -rf "${GR00T_DIR}"
+        sleep 5
+    done
+    [ "${_cloned}" -eq 1 ] || { echo "❌ Isaac-GR00T clone 3회 실패 — GitHub 도달 불가 호스트"; exit 1; }
 else
     echo "    이미 존재 — skip"
 fi
