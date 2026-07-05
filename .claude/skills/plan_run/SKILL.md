@@ -21,15 +21,20 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
 
 ## 스테이지 1 — 데이터 준비 (멱등)
 
-`data.hf_dataset_repo @ version` 이 이미 HF 에 있으면 **건너뛴다**(`/hf_push_dataset --verify-only` 로 확인). 없으면 순서대로(전부 로컬/WSL·무과금):
+**학습셋**과 **홀드아웃 평가셋**을 따로 만든다 (train/test 분리 — 평가는 학습에 **없던 씬**에서 재야 성공률이 정직). 전부 로컬/WSL·무과금.
 
+**학습셋** — `data.hf_dataset_repo @ version` 이 이미 HF 에 있으면 **건너뛴다**(`/hf_push_dataset --verify-only`). 없으면:
 1. `/task_to_h5 <env_id> <data.episodes>` (또는 `data.source==fetch_sample_h5` 면 `/fetch_sample_h5 <env_id>`)
-2. `/h5_add_images <env_id> <data.episodes>` → 이미지 데이터셋 h5 (이게 나중에 **평가 입력**이니 경로를 기억)
+2. `/h5_add_images <env_id> <data.episodes>` → 학습용 이미지 h5
 3. `/ee_verify <그 h5>` — **게이트**. 재현율/ik_fails 가 나쁘면 멈추고 알람(데이터·변환 문제지 학습으로 덮을 게 아님).
 4. `/h5_to_lerobot <그 h5>` → LeRobot 디렉토리
-5. `/hf_push_dataset <lerobot 디렉토리> <hf_dataset_repo> --version <version>`
+5. `/hf_push_dataset <lerobot 디렉토리> <hf_dataset_repo> --version <version>` → 파드가 받아감
 
-산출: **평가용 로컬 h5**(스테이지 2에서 반복 사용) + **학습용 HF repo**(파드가 받아감).
+**홀드아웃 평가셋** — 학습셋과 **겹치지 않는 seed** 로 (커스텀 태스크만; lerobot/hf 변환 불필요). 이미 있으면 재사용:
+6. `/task_to_h5 <env_id> <goal.eval.episodes> --start-seed <goal.eval.holdout_start_seed> --traj-name holdout`
+7. `/h5_add_images <env_id> <goal.eval.episodes>` (입력 = 그 holdout 궤적) → **홀드아웃 이미지 h5** = 스테이지2 평가 입력(경로 기억)
+
+산출: 학습용 HF repo(파드행) + **홀드아웃 평가 h5**(스테이지2에서 반복 사용, `eval_method=v2`). 학습셋 h5 를 평가에 쓰지 않는다.
 
 ## 스테이지 2 — 반복 루프 (핵심)
 
@@ -45,9 +50,9 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
    - `pre_approved`: 계획서가 한도(`max_usd`·`max_train_runs`)를 선언했으면 그 안에선 파드 생성 **자율** — 이는 CLAUDE.md 규칙2 예외("선언된 한도 = 사전 승인, plan_run 컨텍스트 한정")에 근거한다. 한도 **도달** 시 멈추고 재승인 요청. **한도가 없으면 pre_approved 라도 per_pod 처럼 건건 승인**(무한도 자율 금지 — 규칙2).
 3. **학습** — `/gr00t_train --max-steps <steps> --hf-dataset-repo <data repo> --hf-output-repo <training.hf_output_repo>` (+ `training.finetune_scope==full` 이면 `--full`). 학습 파드는 업로드 후 **자가종료**.
 4. **서빙** — `/gr00t_serve <업로드된 hf_model>`. 파드 IP/포트는 내가 직접 얻는다(`runpod_client.pod().portMappings` — CLAUDE.md 규칙3, 사용자에게 안 물음).
-5. **평가** — `/gr00t_eval <스테이지1 로컬 h5> --server-host <ip> --count <goal.eval.episodes> --seed <goal.eval.seed> --instruction "<mission.instruction>"`. 성공률을 읽는다.
+5. **평가** — `/gr00t_eval <스테이지1 홀드아웃 h5> --server-host <ip> --count <goal.eval.episodes> --seed <goal.eval.seed> --instruction "<mission.instruction>"`. 성공률을 읽는다 (학습 안 쓴 씬 = eval v2).
 6. **파드 종료** — `auto_runpod_down` 이면 서빙 파드 `/runpod_down <id> --yes`(과금 중단·자율). `reconfirm` 이면 종료 **전에** 같은 체크포인트를 다른 seed 로 한 번 더 평가해 확인.
-7. **기록 & 안내** — `history` 에 `{steps, success}` 추가. 사용자에게 진행 메시지(`notify.channel`): 예 *"6000스텝=0.80, 남은거리 1/3(0.093) 넘음 → 12000 진행"*. 1번으로 돌아감.
+7. **기록 & 안내** — `history` 에 `{steps, success}` 추가. MANIFEST 에 eval 기록(홀드아웃이므로 v2): `python scripts\manifest.py set-eval <task> <model> <success> --method v2`. 사용자에게 진행 메시지(`notify.channel`): 예 *"6000스텝=0.80, 남은거리 1/3(0.093) 넘음 → 12000 진행"*. 1번으로 돌아감.
 
 ## 종료 (알람)
 

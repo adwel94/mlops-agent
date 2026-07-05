@@ -67,17 +67,29 @@ def run(
     sim_backend: str = "cpu",
     only_success: bool = True,
     num_procs: int = 1,
+    start_seed: int = 0,
     verbose: bool = False,
 ) -> Path:
     """Solve `task` `count` times via motion planning. Returns the produced .h5.
 
     The result is a raw trajectory (actions + env_states, obs_mode=none); feed it
     to `scripts.h5_add_images.run(task, traj_path=<this>)` to add RGB observations.
+
+    `start_seed` shifts the scene-seed range. Generate a held-out eval set from a
+    range disjoint from the training set (e.g. start_seed=90000) so the policy is
+    scored on initial conditions it never trained on (train/test split). Only the
+    custom seed-loop generator supports this; built-in ManiSkill tasks do not.
     """
     if task not in SUPPORTED_TASKS:
         raise ValueError(
             f"No motion-planning solution for '{task}'. "
             f"Supported: {', '.join(SUPPORTED_TASKS)}"
+        )
+    if start_seed and task not in CUSTOM_TASKS:
+        raise ValueError(
+            f"--start-seed 는 커스텀 태스크에서만 지원됩니다 (빌트인 '{task}' 는 "
+            f"ManiSkill run.py 의 seed 스킴이라 disjoint 구간을 보장 못 함). "
+            f"홀드아웃 평가셋이 필요한 태스크는 커스텀 경로로."
         )
 
     dest_dir = DATASETS_ROOT / task
@@ -98,6 +110,7 @@ def run(
             "--sim-backend", sim_backend,
             "--record-dir", f'"{_win_to_wsl(record_dir)}"',
             "--traj-name", traj_name,
+            "--start-seed", str(start_seed),
         ]
         if only_success:
             inner.append("--only-success")
@@ -171,6 +184,9 @@ def _cli() -> None:
     p.add_argument("--obs-mode", default="none")
     p.add_argument("--sim-backend", default="cpu")
     p.add_argument("--num-procs", type=int, default=1)
+    p.add_argument("--start-seed", type=int, default=0,
+                   help="씬 seed 시작점 (커스텀 태스크만). 홀드아웃 평가셋은 학습셋과 "
+                        "겹치지 않는 구간에서 생성, 예: --start-seed 90000")
     p.add_argument("--all-attempts", action="store_true",
                    help="Keep failed attempts too (default: only successful)")
     p.add_argument("--verbose", action="store_true")
@@ -183,6 +199,7 @@ def _cli() -> None:
         sim_backend=args.sim_backend,
         only_success=not args.all_attempts,
         num_procs=args.num_procs,
+        start_seed=args.start_seed,
         verbose=args.verbose,
     )
     print(f"\nSolved trajectory -> {out}")

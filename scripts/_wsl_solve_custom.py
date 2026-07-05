@@ -44,6 +44,9 @@ def main():
     p.add_argument("--obs-mode", default="none")
     p.add_argument("--sim-backend", default="cpu")
     p.add_argument("--only-success", action="store_true")
+    # 씬 seed 시작점. 홀드아웃 평가셋은 학습셋(0..N)과 겹치지 않는 구간(예 90000)에서
+    # 생성해 "학습에 없던 배치"로 평가하게 한다 (train/test 분리).
+    p.add_argument("--start-seed", type=int, default=0)
     args = p.parse_args()
 
     if args.task not in SOLUTIONS:
@@ -67,7 +70,7 @@ def main():
 
     print(f"Custom motion planning on {args.task}")
     pbar = tqdm(range(args.count))
-    seed, passed, failed = 0, 0, 0
+    seed, passed, failed = args.start_seed, 0, 0
     successes = []
     while passed < args.count:
         try:

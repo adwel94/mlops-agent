@@ -30,6 +30,7 @@ DEFAULTS = {
     "target": 0.90,
     "episodes": 50,
     "seed": 0,
+    "holdout_start_seed": 90000,       # 홀드아웃 평가셋 씬 seed 시작점 (학습셋과 분리)
     "data_source": "task_to_h5",       # task_to_h5 | fetch_sample_h5
     "data_episodes": 100,
     "hf_dataset_repo": "adwel94/maniskill-threecubes-lerobot",
@@ -75,8 +76,9 @@ mission:
 goal:
   target_success_rate: {target}        # 이 점수 도달 = 임무 완료
   eval:                                # 평가 조건 (반복 내내 고정 → 비교 가능)
-    episodes: {episodes}               # 시험 판 수. 선택지: 50 | 100 (많을수록 흔들림↓·시간↑)
-    seed: {seed}                       # 고정 → 매 반복 같은 상황으로 페어 비교
+    episodes: {episodes}               # 홀드아웃 평가셋 크기(=eval count). 선택지: 50 | 100
+    seed: {seed}                       # 평가 샘플 RNG 고정 → 매 반복 동일 비교
+    holdout_start_seed: {holdout_start_seed}          # 학습셋(0..N)과 겹치지 않는 씬 seed 시작점 (train/test 분리, eval_method=v2)
     action_steps: 16                   # 하네스 기본값(호라이즌 최대=최적). 바꾸지 않음
     budget_factor: 3                   # 하네스 기본값(궤적길이×3). 바꾸지 않음
 
@@ -137,6 +139,9 @@ def _validate_create(v: dict) -> None:
         errs.append("seed 는 0 이상")
     if int(v["data_episodes"]) <= 0:
         errs.append("data_episodes 는 양수")
+    if int(v["holdout_start_seed"]) <= int(v["data_episodes"]):
+        errs.append(f"holdout_start_seed({v['holdout_start_seed']}) 는 data_episodes"
+                    f"({v['data_episodes']})보다 충분히 커야 함 — 학습셋 seed 와 겹치면 안 됨(예 90000)")
     ladder = v["ladder"]
     if not ladder or any(int(s) <= 0 for s in ladder):
         errs.append("ladder 는 양의 정수 리스트")
@@ -166,6 +171,7 @@ def run_create(out: str | None = None, **overrides) -> Path:
         name=v["name"], task_kind=v["task_kind"], env_id=v["env_id"],
         description=v["description"], instruction=v["instruction"],
         target=v["target"], episodes=v["episodes"], seed=v["seed"],
+        holdout_start_seed=v["holdout_start_seed"],
         data_source=v["data_source"], data_episodes=v["data_episodes"],
         hf_dataset_repo=v["hf_dataset_repo"], version=v["version"],
         hf_output_repo=v["hf_output_repo"], finetune_scope=v["finetune_scope"],
@@ -253,7 +259,8 @@ def _cli_create(a) -> int:
     path = run_create(
         out=a.out, name=a.name, task_kind=a.task_kind, env_id=a.env_id,
         description=a.description, instruction=a.instruction, target=a.target,
-        episodes=a.episodes, seed=a.seed, data_source=a.data_source,
+        episodes=a.episodes, seed=a.seed, holdout_start_seed=a.holdout_start_seed,
+        data_source=a.data_source,
         data_episodes=a.data_episodes, hf_dataset_repo=a.hf_dataset_repo,
         version=a.version, hf_output_repo=a.hf_output_repo,
         finetune_scope=a.finetune_scope, ladder=ladder,
@@ -289,6 +296,8 @@ def main(argv=None) -> int:
     c.add_argument("--target", type=float)
     c.add_argument("--episodes", type=int)
     c.add_argument("--seed", type=int)
+    c.add_argument("--holdout-start-seed", dest="holdout_start_seed", type=int,
+                   help="홀드아웃 평가셋 씬 seed 시작점 (학습셋과 겹치지 않게, 기본 90000)")
     c.add_argument("--data-source", dest="data_source", choices=sorted(_ENUMS["data_source"]))
     c.add_argument("--data-episodes", dest="data_episodes", type=int)
     c.add_argument("--hf-dataset-repo", dest="hf_dataset_repo")
