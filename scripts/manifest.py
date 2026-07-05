@@ -103,16 +103,21 @@ def add_model(task: str, name: str, *, dataset: str, steps: int, full: bool, rep
     print(f"[manifest] models/{task}/{name} 기록 -> {MANIFEST_PATH.name}")
 
 
-def set_eval(task: str, name: str, value: float) -> None:
-    """기존 모델 항목의 eval 값을 채운다 (gr00t_eval 결과 기록)."""
+def set_eval(task: str, name: str, value: float, method: str = "v2") -> None:
+    """기존 모델 항목의 eval 값을 채운다 (gr00t_eval 결과 기록).
+
+    method = 평가 방식. v2 = 홀드아웃 씬(학습 안 쓴 seed, 배포 근사; 현행 기본).
+    v1 = 학습 씬 측정(낙관 편향, 옛 값). v1↔v2 는 사과-오렌지라 직접 비교 금지.
+    """
     data = load()
     try:
         entry = data[task]["models"][name]
     except KeyError:
         raise SystemExit(f"항목 없음: models/{task}/{name} — manifest 에 먼저 기록돼 있어야 합니다.")
     entry["eval"] = value
+    entry["eval_method"] = method
     _save(data)
-    print(f"[manifest] models/{task}/{name}.eval = {value}")
+    print(f"[manifest] models/{task}/{name}.eval = {value} (eval_method={method})")
 
 
 def _cli() -> None:
@@ -129,6 +134,8 @@ def _cli() -> None:
     se.add_argument("task")
     se.add_argument("model_name")
     se.add_argument("value", type=float)
+    se.add_argument("--method", default="v2", choices=["v1", "v2"],
+                    help="평가 방식 (기본 v2=홀드아웃; v1=학습 씬 옛 방식)")
     args = p.parse_args()
 
     if args.cmd == "show":
@@ -137,7 +144,7 @@ def _cli() -> None:
         else:
             print("(MANIFEST.yaml 없음)")
     elif args.cmd == "set-eval":
-        set_eval(args.task, args.model_name, args.value)
+        set_eval(args.task, args.model_name, args.value, args.method)
 
 
 if __name__ == "__main__":
