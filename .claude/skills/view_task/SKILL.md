@@ -14,7 +14,8 @@ description: SAPIEN 데스크탑 뷰어 창을 열어 태스크 환경을 시각
    - 옵션 `--shader default|rt-fast|rt|minimal` (기본 `default`; `rt`/`rt-fast`는 이 머신 크래시 이력)
 2. 프로젝트 루트에서 **백그라운드 spawn** (채팅 안에서 블로킹 대기 금지 — 항상 spawn 후 즉시 반환):
    ```
-   Start-Process -NoNewWindow C:\Users\hun41\miniconda3\envs\maniskill\python.exe -ArgumentList "scripts\view_task.py","--task","<TASK>"
+   # Windows (PowerShell): Start-Process -NoNewWindow <maniskill-python> -ArgumentList "scripts/view_task.py","--task","<TASK>"
+   # macOS/Linux (백그라운드):  <maniskill-python> scripts/view_task.py --task <TASK> &
    ```
 3. spawn된 pid를 보고 (필요시 종료용).
 

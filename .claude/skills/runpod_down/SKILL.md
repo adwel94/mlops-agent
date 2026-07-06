@@ -20,7 +20,7 @@ description: RunPod 파드를 종료한다 (과금 중단). cloud/runpod/runpod_
    - `--yes` — 실제 삭제 (없으면 드라이런)
 2. **1단계 (드라이런)**: 먼저 `--yes` 없이 실행해 종료 대상을 출력:
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe cloud\runpod\runpod_down.py <pod_id>
+   <maniskill-python> cloud/runpod/runpod_down.py <pod_id>
    ```
    (대상이 헷갈리면 먼저 `/runpod_ls` 로 id 확인.)
 3. 출력된 대상을 사용자에게 보여주고 **삭제 확인**을 받는다.

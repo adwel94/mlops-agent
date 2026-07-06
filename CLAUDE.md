@@ -32,6 +32,9 @@
 
 명령 실행에 필요한 운영 사실. (pip 의존성 = `requirements.txt`, 부트스트랩 절차 = SETUP.md.)
 
+스킬 문서가 쓰는 **`<maniskill-python>`** 플레이스홀더 = 아래 각 OS 의 conda env `maniskill`
+Python 경로(스킬 실행 시 현재 플랫폼 값으로 치환). 스크립트 경로는 `/` 로 쓴다(윈도우도 허용).
+
 **macOS (Apple Silicon)** (소비 파이프라인 + `ee_verify`·`gr00t_eval` 네이티브) — conda env
 `maniskill`, Python `/opt/homebrew/Caskroom/miniconda/base/envs/maniskill/bin/python`.
 시뮬 **CPU 백엔드**, 렌더 **MoltenVK**(Vulkan→Metal; ICD 지정은 `scripts/__init__.py`).

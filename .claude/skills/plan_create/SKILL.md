@@ -29,9 +29,9 @@ description: 모델 개발 "계획서"(실행 사양 YAML)를 만드는 스킬. 
    | 고정점수 방식 원하면 | `--continue-type fixed_points --fixed-points 5\|10` |
    | 승인 방식 | `--approval-mode per_pod\|pre_approved` |
 
-2. 프로젝트 루트에서 실행 (python = conda env `maniskill`; 플랫폼별 경로는 CLAUDE.md 환경 가정):
+2. 프로젝트 루트에서 실행:
    ```
-   python scripts/model_plan.py create --name <name> [매핑한 플래그…]
+   <maniskill-python> scripts/model_plan.py create --name <name> [매핑한 플래그…]
    ```
 3. 스크립트가 값을 **검증**(enum·target 범위·사다리 오름차순·gap_fraction 범위·custom이면 description 필수 등)한 뒤 `plans/<name>.yaml` 을 쓴다. 실패하면 오류 메시지를 그대로 사용자에게 전달(계획을 잘못 만드는 걸 여기서 막는다).
 4. 생성된 경로를 보고하고, **핵심 선택(목표·사다리·손절규칙·승인방식)을 한눈에 요약**한다. 이어서 `/plan_run plans/<name>.yaml` 로 실행함을 안내한다.

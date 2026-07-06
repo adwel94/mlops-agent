@@ -17,9 +17,9 @@ description: ManiSkill 모션 플래닝으로 로봇 팔의 액션 궤적을 처
    - `--start-seed N` (커스텀 태스크만) = 씬 seed 시작점. 홀드아웃 평가셋은 학습셋(seed 0..N)과 겹치지 않는 구간(예 `--start-seed 90000`)으로 준다.
    - `--traj-name <이름>` = 출력 파일명(기본 `motionplanning`). 홀드아웃은 학습셋을 덮지 않게 다른 이름(예 `holdout`)으로.
    - 지원 목록 밖이면 스크립트가 `ValueError` — 사용자에게 지원 목록 안내.
-2. 프로젝트 루트에서 실행 (PowerShell 툴, `Set-Location C:\Users\hun41\PycharmProjects\maniskill;` 후):
+2. 프로젝트 루트에서 실행:
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe scripts\task_to_h5.py --task <TASK> --count <N>
+   <maniskill-python> scripts/task_to_h5.py --task <TASK> --count <N>
    ```
 3. 요약(`[task_to_h5] success_rate=...`)과 결과 경로(`Solved trajectory -> ...`) 그대로 보고. PickCube 기준 에피소드당 약 0.2~0.3초.
 

@@ -22,7 +22,7 @@ description: ManiSkill 하네스 환경이 "이 환경에서 하네스가 돌아
      CLAUDE.md "패키지 설치 먼저 승인" 정합).
 2. 프로젝트 루트에서 실행:
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe scripts\check_maniskill_env.py [--fix] [--no-wsl]
+   <maniskill-python> scripts/check_maniskill_env.py [--fix] [--no-wsl]
    ```
 3. PASS/WARN/FAIL 표 + 각 비-PASS 항목의 `→ 제안` + 종합 판정 그대로 보고.
    종료 코드: 0 = pass, 1 = fail.

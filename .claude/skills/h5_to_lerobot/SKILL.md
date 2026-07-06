@@ -12,7 +12,7 @@
    - 옵션 `--out <DIR>` (기본: 입력 옆 `lerobot/`), `--fps N` (기본 20), `--camera <name>`
 2. 프로젝트 루트에서 실행:
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe scripts\h5_to_lerobot.py --traj-path "<PATH>" [--instruction "..."]
+   <maniskill-python> scripts/h5_to_lerobot.py --traj-path "<PATH>" [--instruction "..."]
    ```
 3. 출력 경로 + 요약(에피소드/프레임 수, tasks, action=10d 절대 EEF / state=qpos+eef) 보고.
 

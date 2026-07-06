@@ -14,7 +14,7 @@ mplib이 Linux 전용이라 실행은 WSL에서 돌고, 이 스킬이 Windows에
    - 옵션 `--seed N` (재현 가능한 랜덤 샘플), `--task <id>` (기본: 사이드카 `env_id`), `--sim-backend cpu`
 2. 프로젝트 루트에서 실행:
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe scripts\ee_verify.py --traj-path "<PATH>" [--count N] [--seed S]
+   <maniskill-python> scripts/ee_verify.py --traj-path "<PATH>" [--count N] [--seed S]
    ```
 3. 결과 한 줄 보고: `orig_success=.../N ee_success=.../N reproduction_rate=... ik_fails=...`.
    - `reproduction_rate`가 1.0에 가까우면 EE 방식 건강 → `h5_to_lerobot` 진행.

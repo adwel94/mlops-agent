@@ -16,7 +16,7 @@ description: 떠 있는 RunPod 파드 목록을 상태와 시간당 비용($/hr)
 1. 인자 없음.
 2. 프로젝트 루트에서 실행:
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe cloud\runpod\runpod_ls.py
+   <maniskill-python> cloud/runpod/runpod_ls.py
    ```
 3. 출력: 파드 표 + `running 합계 ≈ $X/hr`. 파드가 없으면 그 사실을 알림.
 

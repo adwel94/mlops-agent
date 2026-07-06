@@ -12,7 +12,7 @@
    - 옵션 `--seed N` (재현 가능한 랜덤 선택), `--fps N` (영상 fps, 기본 15)
 2. 프로젝트 루트에서 실행:
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe scripts\h5_report.py --traj-path "<PATH>" --n 3 [--seed 42]
+   <maniskill-python> scripts/h5_report.py --traj-path "<PATH>" --n 3 [--seed 42]
    ```
 3. 생성된 `.md` 경로 보고. 리포트와 자산(PNG/MP4)은 입력 옆 `reports/` 폴더에 저장됨. 필름스트립 PNG는 Read 툴로 사용자에게 인라인 표시 가능.
 

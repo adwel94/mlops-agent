@@ -40,9 +40,9 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
 
 `history = []` 로 시작. `decide` 가 멈추라 할 때까지:
 
-1. **다음 행동 판정** — 매번 아래를 호출하고 그 `action` 에 복종 (python = conda env `maniskill`; 플랫폼별 경로는 CLAUDE.md 환경 가정):
+1. **다음 행동 판정** — 매번 아래를 호출하고 그 `action` 에 복종:
    ```
-   python scripts/model_plan.py decide --plan <yaml> --history '<history JSON>'
+   <maniskill-python> scripts/model_plan.py decide --plan <yaml> --history '<history JSON>'
    ```
    - `train(steps)` → 2번으로. `done` → 성공 종료. `stop(plateau|exhausted)` → 종료. `reconfirm` → 6번.
 2. **과금 게이트** (train·serve 는 GPU 파드 = 과금):
@@ -52,7 +52,7 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
 4. **서빙** — `/gr00t_serve <업로드된 hf_model>`. 파드 IP/포트는 내가 직접 얻는다(`runpod_client.pod().portMappings` — CLAUDE.md 규칙3, 사용자에게 안 물음).
 5. **평가** — `/gr00t_eval <스테이지1 홀드아웃 h5> --server-host <ip> --count <goal.eval.episodes> --seed <goal.eval.seed> --instruction "<mission.instruction>"`. 성공률을 읽는다 (학습 안 쓴 씬 = eval v2).
 6. **파드 종료** — `auto_runpod_down` 이면 서빙 파드 `/runpod_down <id> --yes`(과금 중단·자율). `reconfirm` 이면 종료 **전에** 같은 체크포인트를 다른 seed 로 한 번 더 평가해 확인.
-7. **기록 & 안내** — `history` 에 `{steps, success}` 추가. MANIFEST 에 eval 기록(홀드아웃이므로 v2): `python scripts/manifest.py set-eval <task> <model> <success> --method v2`. 사용자에게 진행 메시지(`notify.channel`): 예 *"6000스텝=0.80, 남은거리 1/3(0.093) 넘음 → 12000 진행"*. 1번으로 돌아감.
+7. **기록 & 안내** — `history` 에 `{steps, success}` 추가. MANIFEST 에 eval 기록(홀드아웃이므로 v2): `<maniskill-python> scripts/manifest.py set-eval <task> <model> <success> --method v2`. 사용자에게 진행 메시지(`notify.channel`): 예 *"6000스텝=0.80, 남은거리 1/3(0.093) 넘음 → 12000 진행"*. 1번으로 돌아감.
 
 ## 종료 (알람)
 

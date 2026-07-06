@@ -36,7 +36,7 @@ ManiSkill env 생성 → 에피소드 seed로 reset
    - `--server-port` (기본 5555), `--action-steps` (replan당 실행 액션 수, ≤ 호라이즌, 기본 16), `--max-steps` (에피소드당 step budget, `0`=기록 길이), `--task <id>` (기본: 사이드카 `env_id`), `--sim-backend cpu`
 2. 프로젝트 루트에서 실행:
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe scripts\gr00t_eval.py --traj-path "<PATH>" --server-host <ip> [--count N] [--instruction "..."]
+   <maniskill-python> scripts/gr00t_eval.py --traj-path "<PATH>" --server-host <ip> [--count N] [--instruction "..."]
    ```
 3. 결과 한 줄 보고: `episodes=N orig_success=.../N policy_success=.../N success_rate=... ik_fails=...`.
 

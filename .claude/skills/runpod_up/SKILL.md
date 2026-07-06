@@ -26,7 +26,7 @@ description: RunPod GPU 파드를 생성한다 (GR00T 학습/평가용). cloud/r
    - `--image <IMG>`, `--cloud-type COMMUNITY|SECURE`, `--port`(반복)
 2. 프로젝트 루트에서 실행:
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe cloud\runpod\runpod_up.py [옵션]
+   <maniskill-python> cloud/runpod/runpod_up.py [옵션]
    ```
 3. 출력: `pod_id`, 상태/비용 요약, 그리고 다음 단계 런북(전송→bootstrap→smoke/serve→down).
 
