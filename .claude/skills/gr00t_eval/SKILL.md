@@ -24,7 +24,7 @@ ManiSkill env 생성 → 에피소드 seed로 reset
 
 - **떠 있는 정책 서버** — `/gr00t_serve <hf_model>` 로 학습 모델을 5555/tcp 서버로 띄워야 함. `--server-host` 는 그 파드의 TCP 프록시 IP/호스트.
 - **WSL 환경** (mplib + 소프트웨어 Vulkan) + 일회성 `pip install pyzmq msgpack msgpack-numpy` (WSL maniskill env).
-- **SOURCE 이미지 데이터셋 h5** (`h5_add_images` 출력) — `obs/extra/tcp_pose`, `episode_seed`, `label_metadata` 필요. LeRobot 디렉토리는 안 됨(seed/label이 없음). **학습에 안 쓴 홀드아웃 세트**를 쓴다(학습셋과 겹치지 않는 seed 구간, 아래 "순서" 참고) — 학습 씬에서 재면 성공률이 부풀려진다.
+- **SOURCE 이미지 데이터셋 h5** (`h5_add_images` 출력) — `obs/extra/tcp_pose`, `episode_seed`, `label_metadata` 필요. LeRobot 디렉토리는 안 됨(seed/label이 없음). 입력은 학습에 안 쓴 홀드아웃 세트(학습셋과 겹치지 않는 seed 구간; 아래 "순서" 참고).
 
 ## 호출됐을 때
 
@@ -47,7 +47,7 @@ ManiSkill env 생성 → 에피소드 seed로 reset
 - **프롬프트는 템플릿 구조** — 스텝마다 실시간 입력이 아니라, 에피소드당 1개의 템플릿을 라벨로 채워 모델에 언어 입력으로 준다. 학습 분포와 같은 문장이어야 정직한 측정.
 - **GR00T 규약에 묶임(모델엔 안 묶임)** — 어떤 GR00T 파인튜닝 체크포인트든 `--server-host` 로 갈아끼울 수 있으나, 와이어포맷(msgpack)·모달리티 키(`base_camera` 비디오 / `qpos+eef` 상태 / `eef+gripper` 액션 / 언어키 `annotation.human.task_description`)는 GR00T + 우리 임베디먼트 규약(`new_embodiment_config.py`)에 고정. 카메라는 이름(`base_camera`)으로 선택 — 없으면 명확히 실패.
 - **닫힌 루프 / open-loop 드리프트 허용** — ee_verify(기록 waypoint 추종)와 달리 정책이 매 replan마다 현재 obs로 보정한다. 그래서 정책 성공률은 모델의 실제 추종력을 잰다.
-- **순서**: `h5_to_lerobot`(포장) → `gr00t_train`(학습) → `gr00t_serve`(서빙) → **`gr00t_eval`**(평가). 입력은 학습셋이 아니라 **학습에 안 쓴 홀드아웃 h5** — 겹치지 않는 seed 구간에서 `task_to_h5 --start-seed <N>` → `h5_add_images` 로 따로 만든다(lerobot/hf 변환 불필요). 학습 씬에서 재면 낙관 편향 = **eval v1**; 홀드아웃 = **eval v2**(MANIFEST `eval_method` 로 구분, 둘은 사과-오렌지).
+- **순서**: `h5_to_lerobot`(포장) → `gr00t_train`(학습) → `gr00t_serve`(서빙) → **`gr00t_eval`**(평가). 입력은 학습셋이 아니라 홀드아웃 h5 — 겹치지 않는 seed 구간에서 `task_to_h5 --start-seed <N>` → `h5_add_images` 로 따로 만든다(lerobot/hf 변환 불필요). MANIFEST 는 이 값을 `eval_method: v2` 로 기록.
 - **과금**: 평가 실행 자체는 로컬 WSL(무과금)이나, 전제인 정책 서버는 과금 GPU 파드다. 평가 끝나면 `/runpod_ls` 확인 후 `/runpod_down`.
 - 시뮬만 돌고 파일은 안 만든다 (순수 평가).
 

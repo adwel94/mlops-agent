@@ -43,8 +43,6 @@ DEFAULTS = {
     "fixed_points": 5,
     "confirm_on_ambiguous": True,
     "approval_mode": "per_pod",        # per_pod | pre_approved
-    "max_usd": 30,
-    "max_train_runs": 3,
 }
 
 _ENUMS = {
@@ -78,7 +76,7 @@ goal:
   eval:                                # 평가 조건 (반복 내내 고정 → 비교 가능)
     episodes: {episodes}               # 홀드아웃 평가셋 크기(=eval count). 선택지: 50 | 100
     seed: {seed}                       # 평가 샘플 RNG 고정 → 매 반복 동일 비교
-    holdout_start_seed: {holdout_start_seed}          # 학습셋(0..N)과 겹치지 않는 씬 seed 시작점 (train/test 분리, eval_method=v2)
+    holdout_start_seed: {holdout_start_seed}          # 학습셋(0..N)과 겹치지 않는 씬 seed 시작점 (평가는 홀드아웃)
     action_steps: 16                   # 하네스 기본값(호라이즌 최대=최적). 바꾸지 않음
     budget_factor: 3                   # 하네스 기본값(궤적길이×3). 바꾸지 않음
 
@@ -111,16 +109,8 @@ loop:
 
 # ── 5. 예산 & 승인 (과금 게이트) ─────────────────────────────
 budget:
-  approval_mode: {approval_mode}       # 선택지: per_pod(매 파드 승인) | pre_approved(한도 내 자율)
-  max_usd: {max_usd}                   # pre_approved 상한 (또는 전체 상한)
-  max_train_runs: {max_train_runs}     # 최대 학습 횟수 (사다리 칸 수와 맞물림)
-  max_concurrent_pods: 1
+  approval_mode: {approval_mode}       # 선택지: per_pod(매 파드 승인) | pre_approved(step_ladder 봉투 내 자율)
   auto_runpod_down: true               # 평가·서빙 끝나면 파드 자동 종료(과금 중단·자율)
-
-# ── 6. 알림 ──────────────────────────────────────────────────
-notify:
-  channel: discord                     # 진행·종료 알람 채널
-  on: [success, plateau, exhausted, error, awaiting_approval]
 """
 
 
@@ -179,8 +169,7 @@ def run_create(out: str | None = None, **overrides) -> Path:
         continue_type=v["continue_type"], gap_fraction=v["gap_fraction"],
         fixed_points=v["fixed_points"],
         confirm_on_ambiguous=str(bool(v["confirm_on_ambiguous"])).lower(),
-        approval_mode=v["approval_mode"], max_usd=v["max_usd"],
-        max_train_runs=v["max_train_runs"],
+        approval_mode=v["approval_mode"],
     )
     out_path = Path(out) if out else (PLANS_DIR / f"{v['name']}.yaml")
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -266,7 +255,6 @@ def _cli_create(a) -> int:
         finetune_scope=a.finetune_scope, ladder=ladder,
         continue_type=a.continue_type, gap_fraction=a.gap_fraction,
         fixed_points=a.fixed_points, approval_mode=a.approval_mode,
-        max_usd=a.max_usd, max_train_runs=a.max_train_runs,
     )
     print(f"[model_plan] 계획 생성 -> {path}")
     return 0
@@ -309,8 +297,6 @@ def main(argv=None) -> int:
     c.add_argument("--gap-fraction", dest="gap_fraction", type=float)
     c.add_argument("--fixed-points", dest="fixed_points", type=float)
     c.add_argument("--approval-mode", dest="approval_mode", choices=sorted(_ENUMS["approval_mode"]))
-    c.add_argument("--max-usd", dest="max_usd", type=float)
-    c.add_argument("--max-train-runs", dest="max_train_runs", type=int)
     c.set_defaults(func=_cli_create)
 
     d = sub.add_parser("decide", help="평가 이력으로 다음 행동 판정 (JSON 출력)")

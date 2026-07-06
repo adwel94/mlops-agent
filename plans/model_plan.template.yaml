@@ -19,7 +19,7 @@ goal:
   eval:                                # 평가 조건 (반복 내내 고정 → 비교 가능)
     episodes: 50               # 홀드아웃 평가셋 크기(=eval count). 선택지: 50 | 100
     seed: 0                       # 평가 샘플 RNG 고정 → 매 반복 동일 비교
-    holdout_start_seed: 90000          # 학습셋(0..N)과 겹치지 않는 씬 seed 시작점 (train/test 분리, eval_method=v2)
+    holdout_start_seed: 90000          # 학습셋(0..N)과 겹치지 않는 씬 seed 시작점 (평가는 홀드아웃)
     action_steps: 16                   # 하네스 기본값(호라이즌 최대=최적). 바꾸지 않음
     budget_factor: 3                   # 하네스 기본값(궤적길이×3). 바꾸지 않음
 
@@ -52,13 +52,5 @@ loop:
 
 # ── 5. 예산 & 승인 (과금 게이트) ─────────────────────────────
 budget:
-  approval_mode: per_pod       # 선택지: per_pod(매 파드 승인) | pre_approved(한도 내 자율)
-  max_usd: 30                   # pre_approved 상한 (또는 전체 상한)
-  max_train_runs: 3     # 최대 학습 횟수 (사다리 칸 수와 맞물림)
-  max_concurrent_pods: 1
+  approval_mode: per_pod       # 선택지: per_pod(매 파드 승인) | pre_approved(step_ladder 봉투 내 자율)
   auto_runpod_down: true               # 평가·서빙 끝나면 파드 자동 종료(과금 중단·자율)
-
-# ── 6. 알림 ──────────────────────────────────────────────────
-notify:
-  channel: discord                     # 진행·종료 알람 채널
-  on: [success, plateau, exhausted, error, awaiting_approval]

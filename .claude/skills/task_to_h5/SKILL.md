@@ -14,7 +14,7 @@ description: ManiSkill 모션 플래닝으로 로봇 팔의 액션 궤적을 처
 1. `args` 파싱:
    - 첫 번째 비-플래그 토큰 = 태스크 ID (기본 `PickCube-v1`)
    - 두 번째 정수 토큰 = 에피소드 수 (기본 `100`)
-   - `--start-seed N` (커스텀 태스크만) = 씬 seed 시작점. **홀드아웃 평가셋**을 만들 때 학습셋(seed 0..N)과 겹치지 않는 구간(예 `--start-seed 90000`)으로 준다.
+   - `--start-seed N` (커스텀 태스크만) = 씬 seed 시작점. 홀드아웃 평가셋은 학습셋(seed 0..N)과 겹치지 않는 구간(예 `--start-seed 90000`)으로 준다.
    - `--traj-name <이름>` = 출력 파일명(기본 `motionplanning`). 홀드아웃은 학습셋을 덮지 않게 다른 이름(예 `holdout`)으로.
    - 지원 목록 밖이면 스크립트가 `ValueError` — 사용자에게 지원 목록 안내.
 2. 프로젝트 루트에서 실행 (PowerShell 툴, `Set-Location C:\Users\hun41\PycharmProjects\maniskill;` 후):
@@ -28,7 +28,7 @@ description: ManiSkill 모션 플래닝으로 로봇 팔의 액션 궤적을 처
 - **전제조건: WSL 환경.** WSL Ubuntu-22.04 + Miniconda `maniskill` env + `mesa-vulkan-drivers`(lavapipe) 가 미리 설치돼 있어야 함 (SETUP.md). 안 돼 있으면 그 안내와 함께 실패.
 - WSL엔 GPU Vulkan이 없어 **소프트웨어 Vulkan(llvmpipe)** 으로 렌더 디바이스를 띄움 (`VK_ICD_FILENAMES`=lavapipe + 래퍼의 `render_backend='cpu'` 주입/`RenderSystem` 폴백). 이게 WSL headless 동작의 핵심.
 - 산출물은 `obs_mode=none`(이미지 없음). 학습용 RGB가 필요하면 이어서 `/h5_add_images <태스크> <count>` (기본 입력이 이 파일).
-- **홀드아웃 평가셋** (train/test 분리): `gr00t_eval` 은 학습에 안 쓴 씬에서 재야 성공률이 정직하다. `--start-seed 90000 --traj-name holdout` 로 겹치지 않는 seed 구간의 소량(예 50개) 세트를 만들고 → `h5_add_images` 로 이미지만 입혀 `gr00t_eval` 입력으로 쓴다(lerobot/hf 변환 불필요). 커스텀 태스크만 지원; 빌트인은 `--start-seed` 를 거부한다.
+- **홀드아웃 평가셋**: `gr00t_eval` 입력은 학습에 안 쓴 씬으로 만든다 — `--start-seed 90000 --traj-name holdout` 로 겹치지 않는 seed 구간의 소량 세트를 생성 → `h5_add_images` 로 이미지만 입힌다(lerobot/hf 불필요). 커스텀 태스크만(빌트인은 `--start-seed` 거부).
 - `ThreeColoredCubes-v1` 같은 이 하네스의 커스텀 태스크는 `scripts/custom_solutions.py` 의 솔루션으로 풀림. 솔버 미지원 태스크(예: PickClutterYCB)는 솔루션 직접 작성 필요 — 현재 범위 밖.
 
 ## 예시

@@ -21,7 +21,7 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
 
 ## 스테이지 1 — 데이터 준비 (멱등)
 
-**학습셋**과 **홀드아웃 평가셋**을 따로 만든다 (train/test 분리 — 평가는 학습에 **없던 씬**에서 재야 성공률이 정직). 전부 로컬/WSL·무과금.
+**학습셋**과 **홀드아웃 평가셋**을 따로 만든다 (평가는 학습에 없던 씬에서). 전부 로컬/WSL·무과금.
 
 **학습셋** — `data.hf_dataset_repo @ version` 이 이미 HF 에 있으면 **건너뛴다**(`/hf_push_dataset --verify-only`). 없으면:
 1. `/task_to_h5 <env_id> <data.episodes>` (또는 `data.source==fetch_sample_h5` 면 `/fetch_sample_h5 <env_id>`)
@@ -40,19 +40,19 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
 
 `history = []` 로 시작. `decide` 가 멈추라 할 때까지:
 
-1. **다음 행동 판정** — 매번 아래를 호출하고 그 `action` 에 복종:
+1. **다음 행동 판정** — 매번 아래를 호출하고 그 `action` 에 복종 (python = conda env `maniskill`; 플랫폼별 경로는 CLAUDE.md 환경 가정):
    ```
-   python scripts\model_plan.py decide --plan <yaml> --history '<history JSON>'
+   python scripts/model_plan.py decide --plan <yaml> --history '<history JSON>'
    ```
    - `train(steps)` → 2번으로. `done` → 성공 종료. `stop(plateau|exhausted)` → 종료. `reconfirm` → 6번.
 2. **과금 게이트** (train·serve 는 GPU 파드 = 과금):
    - `budget.approval_mode == per_pod`: "반복 N: {steps}스텝 학습 + 서빙 파드를 띄웁니다(대략 $X)" 한 줄 **승인 요청**(`awaiting_approval` 알람). 승인 전엔 파드 안 만듦.
-   - `pre_approved`: 계획서가 한도(`max_usd`·`max_train_runs`)를 선언했으면 그 안에선 파드 생성 **자율** — 이는 CLAUDE.md 규칙2 예외("선언된 한도 = 사전 승인, plan_run 컨텍스트 한정")에 근거한다. 한도 **도달** 시 멈추고 재승인 요청. **한도가 없으면 pre_approved 라도 per_pod 처럼 건건 승인**(무한도 자율 금지 — 규칙2).
+   - `pre_approved`: 파드 생성 **자율** — 봉투는 계획서의 **유한한 `step_ladder`**(사다리를 다 돌면 끝). CLAUDE.md 규칙2 예외("유한한 step_ladder = 사전 선언된 봉투, plan_run 컨텍스트 한정")에 근거.
 3. **학습** — `/gr00t_train --max-steps <steps> --hf-dataset-repo <data repo> --hf-output-repo <training.hf_output_repo>` (+ `training.finetune_scope==full` 이면 `--full`). 학습 파드는 업로드 후 **자가종료**.
 4. **서빙** — `/gr00t_serve <업로드된 hf_model>`. 파드 IP/포트는 내가 직접 얻는다(`runpod_client.pod().portMappings` — CLAUDE.md 규칙3, 사용자에게 안 물음).
 5. **평가** — `/gr00t_eval <스테이지1 홀드아웃 h5> --server-host <ip> --count <goal.eval.episodes> --seed <goal.eval.seed> --instruction "<mission.instruction>"`. 성공률을 읽는다 (학습 안 쓴 씬 = eval v2).
 6. **파드 종료** — `auto_runpod_down` 이면 서빙 파드 `/runpod_down <id> --yes`(과금 중단·자율). `reconfirm` 이면 종료 **전에** 같은 체크포인트를 다른 seed 로 한 번 더 평가해 확인.
-7. **기록 & 안내** — `history` 에 `{steps, success}` 추가. MANIFEST 에 eval 기록(홀드아웃이므로 v2): `python scripts\manifest.py set-eval <task> <model> <success> --method v2`. 사용자에게 진행 메시지(`notify.channel`): 예 *"6000스텝=0.80, 남은거리 1/3(0.093) 넘음 → 12000 진행"*. 1번으로 돌아감.
+7. **기록 & 안내** — `history` 에 `{steps, success}` 추가. MANIFEST 에 eval 기록(홀드아웃이므로 v2): `python scripts/manifest.py set-eval <task> <model> <success> --method v2`. 사용자에게 진행 메시지(`notify.channel`): 예 *"6000스텝=0.80, 남은거리 1/3(0.093) 넘음 → 12000 진행"*. 1번으로 돌아감.
 
 ## 종료 (알람)
 
@@ -62,7 +62,7 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
 
 ## 과금·안전 규칙 (CLAUDE.md)
 
-- **승인 필요(사람)**: GPU 파드 생성(train·serve). `per_pod` 는 매번, `pre_approved` 는 한도까지 자율.
+- **승인 필요(사람)**: GPU 파드 생성(train·serve). `per_pod` 는 매번, `pre_approved` 는 계획서의 `step_ladder` 를 도는 동안 자율.
 - **자율(무과금·과금중단·가역)**: 태스크 생성·데이터 전체·평가 롤아웃(로컬 WSL)·`decide`·파드 **종료**(runpod_down).
 - **못 하는 것만 사람에게**: 승인·시크릿·콘솔로그. 파드 IP/포트 등 프로그램으로 얻히는 건 직접.
 - 한 단계가 **2번 실패하면 멈추고 보고**(우회 연쇄 금지). 게이트 FAIL(ee_verify·검증)은 학습으로 덮지 말고 그대로 알람.

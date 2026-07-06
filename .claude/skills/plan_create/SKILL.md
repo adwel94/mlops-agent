@@ -27,11 +27,11 @@ description: 모델 개발 "계획서"(실행 사양 YAML)를 만드는 스킬. 
    | 스텝 사다리 | `--ladder 3000,6000,12000` (오름차순) |
    | 손절 성향 | `--continue-type gap_fraction --gap-fraction 0.25(참을성)\|0.333(권장)\|0.5(빡셈)` |
    | 고정점수 방식 원하면 | `--continue-type fixed_points --fixed-points 5\|10` |
-   | 승인 방식 | `--approval-mode per_pod\|pre_approved` · `--max-usd N` · `--max-train-runs N` |
+   | 승인 방식 | `--approval-mode per_pod\|pre_approved` |
 
-2. 프로젝트 루트에서 실행:
+2. 프로젝트 루트에서 실행 (python = conda env `maniskill`; 플랫폼별 경로는 CLAUDE.md 환경 가정):
    ```
-   C:\Users\hun41\miniconda3\envs\maniskill\python.exe scripts\model_plan.py create --name <name> [매핑한 플래그…]
+   python scripts/model_plan.py create --name <name> [매핑한 플래그…]
    ```
 3. 스크립트가 값을 **검증**(enum·target 범위·사다리 오름차순·gap_fraction 범위·custom이면 description 필수 등)한 뒤 `plans/<name>.yaml` 을 쓴다. 실패하면 오류 메시지를 그대로 사용자에게 전달(계획을 잘못 만드는 걸 여기서 막는다).
 4. 생성된 경로를 보고하고, **핵심 선택(목표·사다리·손절규칙·승인방식)을 한눈에 요약**한다. 이어서 `/plan_run plans/<name>.yaml` 로 실행함을 안내한다.
@@ -42,6 +42,7 @@ description: 모델 개발 "계획서"(실행 사양 YAML)를 만드는 스킬. 
 - **파일 생성은 무과금·가역** — 자율 진행 가능. 실제 과금(파드)은 `/plan_run` 단계에서만 발생.
 - 값 매핑이 애매하면(예 "적당히 빡세게") 추측하지 말고 사용자에게 한 번 되묻는다 — 계획서는 이후 자동 루프의 계약이라 초기값이 중요.
 - 이 스킬은 계획을 **만들기만** 한다. 실행(태스크 생성·데이터·학습·평가)은 `/plan_run` 이 한다.
+- **custom 태스크는 `/add_custom_task` 가능 범위만** — ManiSkill 한계상 강체·panda 테이블탑·모션플래닝으로 풀리는 것만이다(천/유체/손재주는 불가). plan_create 는 YAML 만 만들고, 실제 가능 판정은 `/plan_run` 이 `/add_custom_task` 로 검증한다(불가능하면 거기서 거절·중단).
 
 ## 예시
 
