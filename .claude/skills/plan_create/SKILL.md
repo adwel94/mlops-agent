@@ -20,21 +20,21 @@ description: 모델 개발 "계획서"(실행 사양 YAML)를 만드는 스킬. 
    | 무슨 태스크 — 새 태스크(자연어) | `--task-kind custom --description "<자연어>"` |
    | 언어 지시 | `--instruction "pick the red cube"` |
    | 목표 성공률 (예 "85%") | `--target 0.85` |
-   | 시험 판 수 | `--episodes 50\|100` |
-   | 데이터 출처/규모 | `--data-source task_to_h5\|fetch_sample_h5` · `--data-episodes N` |
-   | HF repo | `--hf-dataset-repo …` · `--version vN` · `--hf-output-repo …` |
-   | 눈 녹이기 | `--finetune-scope full` (기본 head_only) |
+   | 학습 데이터 크기 | `--data-episodes N` |
+   | HF repo | `--hf-dataset-repo …` · `--dataset-tag vN` · `--hf-output-repo …` |
    | 스텝 사다리 | `--ladder 3000,6000,12000` (오름차순) |
-   | 손절 성향 | `--continue-type gap_fraction --gap-fraction 0.25(참을성)\|0.333(권장)\|0.5(빡셈)` |
-   | 고정점수 방식 원하면 | `--continue-type fixed_points --fixed-points 5\|10` |
-   | 승인 방식 | `--approval-mode per_pod\|pre_approved` |
+
+   계획서는 **정하는 것만** 담는 최소셋이다 — 평가 조건·손절 규칙·승인 방식·데이터 출처·
+   finetune 범위 등은 **하네스 기본값**이라 플래그가 없다. 사용자가 그런 고급값을 바꾸려 하면
+   (예 "손절 빡세게", "눈 녹여서"), 생성된 YAML 에 **그 줄을 손으로 추가**한다고 안내한다
+   (기본값 목록은 `/plan_run` 문서 참고).
 
 2. 프로젝트 루트에서 실행:
    ```
    <maniskill-python> scripts/model_plan.py create --name <name> [매핑한 플래그…]
    ```
-3. 스크립트가 값을 **검증**(enum·target 범위·사다리 오름차순·gap_fraction 범위·custom이면 description 필수 등)한 뒤 `plans/<name>.yaml` 을 쓴다. 실패하면 오류 메시지를 그대로 사용자에게 전달(계획을 잘못 만드는 걸 여기서 막는다).
-4. 생성된 경로를 보고하고, **핵심 선택(목표·사다리·손절규칙·승인방식)을 한눈에 요약**한다. 이어서 `/plan_run plans/<name>.yaml` 로 실행함을 안내한다.
+3. 스크립트가 값을 **검증**(target 범위·사다리 오름차순·custom이면 description 필수 등)한 뒤 `plans/<name>.yaml` 을 쓴다. 실패하면 오류 메시지를 그대로 사용자에게 전달(계획을 잘못 만드는 걸 여기서 막는다).
+4. 생성된 경로를 보고하고, **핵심 선택(목표·데이터·사다리)을 한눈에 요약**한다. 이어서 `/plan_run plans/<name>.yaml` 로 실행함을 안내한다.
 
 ## 동작 원리 / 주의사항
 
@@ -49,6 +49,7 @@ description: 모델 개발 "계획서"(실행 사양 YAML)를 만드는 스킬. 
 | 사용자 입력 | 결과 |
 |---|---|
 | `/plan_create` | 기본값 그대로 `plans/my-model-plan.yaml` |
-| `/plan_create ThreeColoredCubes 목표 90%` | `--env-id ThreeColoredCubes-v1 --target 0.90` |
-| `/plan_create 빨간 공을 그릇에 넣기, 목표 80%, 손절 빡세게` | `--task-kind custom --description "빨간 공을 그릇에 넣기" --target 0.80 --gap-fraction 0.5` |
-| `/plan_create 스텝 5000,10000,20000 로, 눈 녹여서` | `--ladder 5000,10000,20000 --finetune-scope full` |
+| `/plan_create ThreeColoredCubes 목표 90%` | `--task-kind existing --env-id ThreeColoredCubes-v1 --target 0.90` |
+| `/plan_create 빨간 공을 그릇에 넣기, 목표 80%` | `--task-kind custom --description "빨간 공을 그릇에 넣기" --target 0.80` |
+| `/plan_create 스텝 5000,10000,20000 로` | `--ladder 5000,10000,20000` |
+| `/plan_create 손절 빡세게 / 눈 녹여서` | (플래그 없음 — 생성 후 YAML 에 `continue_rule`·`finetune_scope` 손으로 추가 안내) |

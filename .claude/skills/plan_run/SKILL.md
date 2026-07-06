@@ -11,7 +11,18 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
 
 ## 0. 계획 읽기
 
-`args` 의 YAML 경로를 읽는다(없으면 `plans/` 목록을 보여주고 요청). `mission·goal·data·training·loop·budget·notify` 를 파악. 이후 모든 값은 이 파일에서만 온다(태스크 이름조차 하드코딩 금지 — 계약만 읽는다).
+`args` 의 YAML 경로를 읽는다(없으면 `plans/` 목록을 보여주고 요청). `mission·goal·data·training·loop·budget` 를 파악. 값은 이 파일에서만 온다(태스크 이름조차 하드코딩 금지 — 계약만 읽는다).
+
+계획서는 **정하는 것만** 담는 최소셋이라, **없는 필드는 하네스 기본값**을 쓴다:
+
+| 없는 필드 | 기본값 |
+|---|---|
+| `goal.eval.episodes` | 50 (홀드아웃 크기 = eval count) |
+| `goal.eval.seed / action_steps / budget_factor` | 0 / 16 / 3 (`gr00t_eval` 기본과 동일 — 생략하면 스크립트가 알아서) |
+| `goal.eval.holdout_start_seed` | 90000 |
+| `loop.continue_rule` | gap_fraction 0.333 (`decide` 가 기본 적용) |
+| `budget.approval_mode` | per_pod |
+| `data.source / training.finetune_scope` | task_to_h5 / head_only |
 
 ## 스테이지 0 — 태스크 준비
 
@@ -28,7 +39,7 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
 2. `/h5_add_images <env_id> <data.episodes>` → 학습용 이미지 h5
 3. `/ee_verify <그 h5>` — **게이트**. 재현율/ik_fails 가 나쁘면 멈추고 알람(데이터·변환 문제지 학습으로 덮을 게 아님).
 4. `/h5_to_lerobot <그 h5>` → LeRobot 디렉토리
-5. `/hf_push_dataset <lerobot 디렉토리> <hf_dataset_repo> --version <version>` → 파드가 받아감
+5. `/hf_push_dataset <lerobot 디렉토리> <hf_dataset_repo> --version <data.dataset_tag>` → 파드가 받아감
 
 **홀드아웃 평가셋** — 학습셋과 **겹치지 않는 seed** 로 (커스텀 태스크만; lerobot/hf 변환 불필요). 이미 있으면 재사용:
 6. `/task_to_h5 <env_id> <goal.eval.episodes> --start-seed <goal.eval.holdout_start_seed> --traj-name holdout`

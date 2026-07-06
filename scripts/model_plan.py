@@ -53,64 +53,39 @@ _ENUMS = {
     "approval_mode": {"per_pod", "pre_approved"},
 }
 
+# 템플릿에서 숨긴 필드의 기본값 (계획서에 없으면 decide 가 이 값 사용)
+DEFAULT_STEP_LADDER = [3000, 6000, 12000]
+DEFAULT_CONTINUE_RULE = {"type": "gap_fraction", "gap_fraction": 0.333, "fixed_points": 5}
+
 # ── YAML 템플릿 (단일 출처 — plans/model_plan.template.yaml 은 이걸로 생성됨) ──────
 TEMPLATE = """\
-# 모델 개발 계획 — 실행 사양 (YAML)   [model_plan.py create 로 생성됨]
+# 모델 개발 계획 — 정하는 것만.   [model_plan.py create 로 생성]
 # ─────────────────────────────────────────────────────────────
-# /plan_run 이 이 사양대로 [태스크→데이터→학습→평가→판정] 루프를
-# 목표 성공률 도달 또는 정지조건까지 반복한다.
-# 각 항목 주석의 "선택지"에서 값을 바꿔 다양한 전략을 고를 수 있다.
+# /plan_run 이 이 사양대로 [태스크→데이터→학습→평가→판정] 루프를 목표까지 반복한다.
+# 여기 없는 값(평가 조건·손절 규칙·승인 방식 등)은 하네스 기본값으로 자동 적용된다.
+# 특정 기본값을 바꾸려면 그 줄만 손으로 추가하면 오버라이드된다.
 
-# ── 1. 미션: 무슨 모델을 만드나 ──────────────────────────────
 mission:
   name: {name}
   task:
-    kind: {task_kind}                  # 선택지: existing | custom
-    env_id: {env_id}                   # kind=existing 일 때. 지원목록은 /task_to_h5 참고
-    description: "{description}"        # kind=custom 일 때 자연어 → /plan_run 이 먼저 /add_custom_task
+    kind: {task_kind}                  # existing | custom
+    env_id: {env_id}                   # kind=existing 일 때 (지원목록은 /task_to_h5)
+    description: "{description}"        # kind=custom 일 때 자연어 (예: "빨간 공을 그릇에")
   instruction: "{instruction}"         # 평가·학습에 쓰는 언어 지시
 
-# ── 2. 목표: 성공 기준 ───────────────────────────────────────
 goal:
-  target_success_rate: {target}        # 이 점수 도달 = 임무 완료
-  eval:                                # 평가 조건 (반복 내내 고정 → 비교 가능)
-    episodes: {episodes}               # 홀드아웃 평가셋 크기(=eval count). 선택지: 50 | 100
-    seed: {seed}                       # 평가 샘플 RNG 고정 → 매 반복 동일 비교
-    holdout_start_seed: {holdout_start_seed}          # 학습셋(0..N)과 겹치지 않는 씬 seed 시작점 (평가는 홀드아웃)
-    action_steps: 16                   # 하네스 기본값(호라이즌 최대=최적). 바꾸지 않음
-    budget_factor: 3                   # 하네스 기본값(궤적길이×3). 바꾸지 않음
+  target_success_rate: {target}        # 이 점수 넘으면 완료
 
-# ── 3. 데이터 & 초기 학습 ────────────────────────────────────
 data:
-  source: {data_source}                # 선택지: task_to_h5(직접 생성) | fetch_sample_h5(공식 데모)
-  episodes: {data_episodes}            # 초기 데이터 규모
+  episodes: {data_episodes}            # 학습 데이터 몇 개
   hf_dataset_repo: {hf_dataset_repo}
-  version: {version}                   # 불변 버전 태그
+  dataset_tag: {version}               # 데이터셋 스냅샷 태그 (불변; 바뀌면 새 태그)
+
 training:
-  hf_output_repo: {hf_output_repo}
-  finetune_scope: {finetune_scope}     # 선택지: head_only(기본) | full(tune_visual·눈녹이기·과금 큼)
+  hf_output_repo: {hf_output_repo}     # 학습된 모델 올릴 HF repo
 
-# ── 4. 반복 루프: 스텝 사다리 + 정지 정책 (핵심) ─────────────
 loop:
-  lever: steps                         # 자동 루프가 돌리는 손잡이. 지금은 steps 하나
-  step_ladder: {ladder}                # 낮은 칸부터 오름 (오름차순 정수)
-  continue_rule:                       # "이번 칸에서 충분히 올랐나?" → 다음 칸 진행 판정
-    type: {continue_type}              # 선택지: gap_fraction | fixed_points
-    gap_fraction: {gap_fraction}       # 남은거리(target−현재)의 이 비율 이상 올라야 계속
-                                       #   선택지: 0.25(참을성) | 0.333(권장·60점→+10) | 0.5(빡센 손절)
-    fixed_points: {fixed_points}       # (type=fixed_points 일 때) 앞 칸보다 +이 절대점수 이상 (선택지: 5 | 10)
-  confirm_on_ambiguous: {confirm_on_ambiguous}   # 기준에 아슬하면 다른 seed 로 한 번 더 확인
-  stop:                                # 아래 중 하나라도 걸리면 루프 종료 + 알람
-    on_target_reached: true            # 목표 도달 → "성공"
-    on_plateau: true                   # continue_rule 미달 → "스텝으론 안 됨"
-    on_ladder_exhausted: true          # 마지막 칸까지 미달 → "스텝 다 써봤는데 안 됨"
-  # 스텝 사다리 소진 후에도 목표 미달이면 남은 카드(데이터↑·full·해상도)는
-  # 비용·판단이 커서 자동 안 함 → 알람으로 사람에게 넘긴다.
-
-# ── 5. 예산 & 승인 (과금 게이트) ─────────────────────────────
-budget:
-  approval_mode: {approval_mode}       # 선택지: per_pod(매 파드 승인) | pre_approved(step_ladder 봉투 내 자율)
-  auto_runpod_down: true               # 평가·서빙 끝나면 파드 자동 종료(과금 중단·자율)
+  step_ladder: {ladder}                # 학습 스텝을 낮은 것부터 점진 (목표 도달까지 오름)
 """
 
 
@@ -187,9 +162,10 @@ def decide_logic(plan: dict, history: list[dict]) -> dict:
     반환 action: train | done | stop | reconfirm
     """
     target = float(plan["goal"]["target_success_rate"])
-    ladder = list(plan["loop"]["step_ladder"])
-    rule = plan["loop"]["continue_rule"]
-    confirm = bool(plan["loop"].get("confirm_on_ambiguous", True))
+    loop = plan.get("loop", {})
+    ladder = list(loop.get("step_ladder", DEFAULT_STEP_LADDER))
+    rule = loop.get("continue_rule", DEFAULT_CONTINUE_RULE)
+    confirm = bool(loop.get("confirm_on_ambiguous", True))
 
     if not history:
         return {"action": "train", "steps": ladder[0],
@@ -248,13 +224,8 @@ def _cli_create(a) -> int:
     path = run_create(
         out=a.out, name=a.name, task_kind=a.task_kind, env_id=a.env_id,
         description=a.description, instruction=a.instruction, target=a.target,
-        episodes=a.episodes, seed=a.seed, holdout_start_seed=a.holdout_start_seed,
-        data_source=a.data_source,
         data_episodes=a.data_episodes, hf_dataset_repo=a.hf_dataset_repo,
-        version=a.version, hf_output_repo=a.hf_output_repo,
-        finetune_scope=a.finetune_scope, ladder=ladder,
-        continue_type=a.continue_type, gap_fraction=a.gap_fraction,
-        fixed_points=a.fixed_points, approval_mode=a.approval_mode,
+        version=a.dataset_tag, hf_output_repo=a.hf_output_repo, ladder=ladder,
     )
     print(f"[model_plan] 계획 생성 -> {path}")
     return 0
@@ -282,21 +253,11 @@ def main(argv=None) -> int:
     c.add_argument("--description")
     c.add_argument("--instruction")
     c.add_argument("--target", type=float)
-    c.add_argument("--episodes", type=int)
-    c.add_argument("--seed", type=int)
-    c.add_argument("--holdout-start-seed", dest="holdout_start_seed", type=int,
-                   help="홀드아웃 평가셋 씬 seed 시작점 (학습셋과 겹치지 않게, 기본 90000)")
-    c.add_argument("--data-source", dest="data_source", choices=sorted(_ENUMS["data_source"]))
     c.add_argument("--data-episodes", dest="data_episodes", type=int)
     c.add_argument("--hf-dataset-repo", dest="hf_dataset_repo")
-    c.add_argument("--version")
+    c.add_argument("--dataset-tag", dest="dataset_tag", help="데이터셋 스냅샷 태그 (예: v2)")
     c.add_argument("--hf-output-repo", dest="hf_output_repo")
-    c.add_argument("--finetune-scope", dest="finetune_scope", choices=sorted(_ENUMS["finetune_scope"]))
     c.add_argument("--ladder", help="쉼표구분 오름차순 정수, 예: 3000,6000,12000")
-    c.add_argument("--continue-type", dest="continue_type", choices=sorted(_ENUMS["continue_type"]))
-    c.add_argument("--gap-fraction", dest="gap_fraction", type=float)
-    c.add_argument("--fixed-points", dest="fixed_points", type=float)
-    c.add_argument("--approval-mode", dest="approval_mode", choices=sorted(_ENUMS["approval_mode"]))
     c.set_defaults(func=_cli_create)
 
     d = sub.add_parser("decide", help="평가 이력으로 다음 행동 판정 (JSON 출력)")
