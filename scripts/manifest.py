@@ -31,6 +31,8 @@ _HEADER = (
     "# 번호를 쓴다(같은 태그에 덮어쓰지 않음).\n"
     "# 자동 append: hf_push_dataset.py(데이터셋) / launch_train.py(모델, eval=null 로 시작).\n"
     "# 모델 eval 은 gr00t_eval 후 기록: python scripts/manifest.py set-eval <task> <model> <값>\n"
+    "# datasets/<v>/cameras = 데이터셋 modality.json(info.json)이 선언한 카메라를 push 때\n"
+    "#   자동 추출 — 손으로 적지 않는다(진실의 출처는 데이터셋 자신). v1/v2 차이는 이 필드로 읽는다.\n"
 )
 
 
@@ -63,16 +65,21 @@ def _save(data: dict) -> None:
 
 
 def add_dataset(task: str, version: str, *, episodes: int | None, repo: str,
-                tag: str | None, date: str | None = None) -> None:
-    """데이터셋 버전 한 줄 기록 (upsert)."""
+                tag: str | None, date: str | None = None,
+                cameras: list[str] | None = None) -> None:
+    """데이터셋 버전 한 줄 기록 (upsert).
+
+    cameras = 데이터셋이 modality.json/info.json 으로 선언한 카메라 이름 목록(순서 보존).
+    push 때 자동 추출해 넘긴다 — 손 서술 금지(진실의 출처는 데이터셋 자신). 선택 필드라
+    옛 항목엔 없을 수 있다(하위호환). episodes 바로 뒤에 놓아 v1/v2 차이가 한눈에 읽히게 한다.
+    """
     data = load()
     node = data.setdefault(task, {}).setdefault("datasets", {})
-    node[version] = {
-        "episodes": episodes,
-        "repo": repo,
-        "tag": tag,
-        "date": date or _today(),
-    }
+    entry: dict = {"episodes": episodes}
+    if cameras is not None:             # 선택 필드 — 없으면 옛 스키마 그대로(키를 안 만듦)
+        entry["cameras"] = list(cameras)
+    entry.update({"repo": repo, "tag": tag, "date": date or _today()})
+    node[version] = entry
     _save(data)
     print(f"[manifest] datasets/{task}/{version} 기록 -> {MANIFEST_PATH.name}")
 

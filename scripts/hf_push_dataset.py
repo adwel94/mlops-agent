@@ -34,6 +34,18 @@ except Exception:
 # LeRobot v2.1 가 요구하는 meta 파일 (로더가 존재를 가정).
 _REQUIRED_META = ("info.json", "episodes.jsonl", "tasks.jsonl", "modality.json", "stats.json")
 
+_IMG_PREFIX = "observation.images."
+
+
+def cameras_from_info(info: dict) -> list[str]:
+    """info.json 이 선언한 카메라 이름 목록 (선언 순서 보존).
+
+    데이터셋 자신이 `observation.images.<cam>` 피처로 들고 있는 값 = 카메라 진실의 출처.
+    사람이 추측해 적지 않고 여기서 그대로 뽑아 MANIFEST 에 미러링한다.
+    """
+    return [k[len(_IMG_PREFIX):] for k in info.get("features", {})
+            if k.startswith(_IMG_PREFIX)]
+
 
 def verify(repo_id: str, repo_type: str = "dataset") -> dict:
     """HF repo 의 LeRobot 구조·카운트를 조회해 점검. 결과 dict 반환, 불일치면 RuntimeError.
@@ -79,10 +91,12 @@ def verify(repo_id: str, repo_type: str = "dataset") -> dict:
          f"{n_tasks} vs {exp_tasks}"),
     ]
 
+    cameras = cameras_from_info(info)
+
     url = f"https://huggingface.co/datasets/{repo_id}"
     print(f"[verify] {url}")
     print(f"  codebase_version={info.get('codebase_version')}  fps={info.get('fps')}  "
-          f"total_frames={info.get('total_frames')}")
+          f"total_frames={info.get('total_frames')}  cameras={cameras}")
     all_ok = True
     for name, ok, detail in checks:
         print(f"  [{'OK ' if ok else 'FAIL'}] {name}  ({detail})")
@@ -91,7 +105,7 @@ def verify(repo_id: str, repo_type: str = "dataset") -> dict:
     result = {
         "repo_id": repo_id, "url": url, "ok": all_ok,
         "n_parquet": len(parquet), "n_mp4": len(mp4), "n_tasks": n_tasks,
-        "info": info, "missing_meta": missing,
+        "cameras": cameras, "info": info, "missing_meta": missing,
     }
     if not all_ok:
         raise RuntimeError(f"검증 실패 — HF 데이터셋 구조 불일치: {repo_id}")
@@ -167,6 +181,7 @@ def run(
         add_dataset(
             task or slug_from_repo(repo_id), version,
             episodes=result.get("info", {}).get("total_episodes"),
+            cameras=result.get("cameras"),
             repo=repo_id, tag=version,
         )
     return url

@@ -4,25 +4,27 @@
 # 번호를 쓴다(같은 태그에 덮어쓰지 않음).
 # 자동 append: hf_push_dataset.py(데이터셋) / launch_train.py(모델, eval=null 로 시작).
 # 모델 eval 은 gr00t_eval 후 기록: python scripts/manifest.py set-eval <task> <model> <값>
-# eval_method: v1 = 학습 씬 측정 / v2 = 홀드아웃 씬(학습 안 쓴 seed). 둘은 직접 비교 금지.
-#   set-eval 은 기본 v2 로 기록.
-# env_id: 태스크 키 → 시뮬 환경 ID (gr00t_play 가 모델 좌표만으로 환경을 구축하는 근거).
+# datasets/<v>/cameras = 데이터셋 modality.json(info.json)이 선언한 카메라를 push 때
+#   자동 추출 — 손으로 적지 않는다(진실의 출처는 데이터셋 자신). v1/v2 차이는 이 필드로 읽는다.
 threecubes:
   env_id: ThreeColoredCubes-v1
   datasets:
     v1:
       episodes: 1000
+      cameras:
+      - base_camera
       repo: adwel94/maniskill-threecubes-lerobot
       tag: v1
       date: '2026-06-19'
     v2:
       episodes: 1000
+      cameras:
+      - base_camera
+      - hand_camera
       repo: adwel94/maniskill-threecubes-lerobot
       tag: v2
       date: '2026-06-30'
-      note: wrist-cam (panda_wristcam) — 2-camera [base_camera, hand_camera]; same
-        1000 trajectories as v1, regenerated with the wrist hand_camera added (reaching-precision
-        fix)
+      note: reaching-precision fix — v1 과 같은 1000 궤적을 손목캠 추가해 재생성
   models:
     v1-s3000:
       dataset: v1
@@ -67,6 +69,9 @@ cubeinbowl:
   datasets:
     v1:
       episodes: 988
+      cameras:
+      - base_camera
+      - hand_camera
       repo: adwel94/maniskill-cubeinbowl-lerobot
       tag: v1
       date: '2026-07-02'
@@ -80,3 +85,13 @@ cubeinbowl:
       eval: null
       date: '2026-07-02'
       image: adwel94/maniskill-gr00t-train:latest
+    v0-s3000:
+      dataset: v0
+      steps: 3000
+      full: false
+      repo: adwel94/gr00t-cubeinbowl
+      tag: v0-s3000
+      eval: 0.18
+      date: '2026-07-06'
+      image: adwel94/maniskill-gr00t-train:latest
+      eval_method: v2
