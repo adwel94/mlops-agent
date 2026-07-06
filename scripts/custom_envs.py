@@ -115,6 +115,11 @@ class ThreeColoredCubesEnv(PickCubeEnv):
         """
         return {"target_id": [name for name, _ in CUBE_COLORS]}
 
+    def instruction_template(self) -> str:
+        """언어 명령 틀 — {target_id} 는 label_metadata 로 색 이름 치환. 학습(h5_to_lerobot)과
+        평가(gr00t_eval)가 이 하나만 읽어 문구가 어긋나지 않게 한다(단일 출처)."""
+        return "pick up the {target_id} cube"
+
     def evaluate(self):
         # success = the TARGET cube is grasped and lifted clear of the table
         grasped = torch.stack(
@@ -269,6 +274,11 @@ class ColoredCubeInBowlEnv(PickCubeEnv):
 
     def label_metadata(self) -> dict:
         return {"target_id": [name for name, _ in CUBE_COLORS]}
+
+    def instruction_template(self) -> str:
+        """언어 명령 틀 — {target_id} 는 label_metadata 로 색 이름 치환. 학습(h5_to_lerobot)과
+        평가(gr00t_eval)가 이 하나만 읽어 문구가 어긋나지 않게 한다(단일 출처)."""
+        return "put the {target_id} cube in the bowl"
 
     def evaluate(self):
         ar = torch.arange(self.num_envs, device=self.device)

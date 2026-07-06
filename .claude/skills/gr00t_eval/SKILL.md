@@ -1,6 +1,6 @@
 ---
 name: gr00t_eval
-description: 학습된 GR00T 정책을 ManiSkill 시뮬레이션에 붙여 닫힌 루프로 직접 굴리고 태스크 성공률을 재는 배포 평가 스킬 (④-eval). scripts/gr00t_eval.py 래퍼 — 정책(GPU)은 원격(RunPod)에서 ZMQ 서버로 뜨고(gr00t_serve), 이 스킬이 WSL 롤아웃 클라이언트(_wsl_gr00t_eval.py: sim + mplib IK, torch 없음)를 구동해 서버에 붙는다. 매 스텝: sim obs(rgb+qpos+abs-EEF+언어) → 정책 get_action(절대 EEF) → rot6d→quat → mplib IK → env.step → success 판정. 입력은 SOURCE 이미지 데이터셋 h5(h5_add_images 출력 — episode_seed/label_metadata/tcp_pose 필요), LeRobot 디렉토리 아님. 평가 자체는 무과금(로컬 WSL)이나 떠 있는 정책 서버(gr00t_serve)는 과금 GPU 파드이므로 끝나면 runpod_down. args = `<dataset-h5> --server-host <ip> [--count N] [--seed S] [--instruction "..."] [--server-port 5555] [--action-steps 16] [--max-steps 0] [--task <id>]`.
+description: 학습된 GR00T 정책을 ManiSkill 시뮬레이션에 붙여 닫힌 루프로 직접 굴리고 태스크 성공률을 재는 배포 평가 스킬 (④-eval). scripts/gr00t_eval.py 래퍼 — 정책(GPU)은 원격(RunPod)에서 ZMQ 서버로 뜨고(gr00t_serve), 이 스킬이 WSL 롤아웃 클라이언트(_wsl_gr00t_eval.py: sim + mplib IK, torch 없음)를 구동해 서버에 붙는다. 매 스텝: sim obs(rgb+qpos+abs-EEF+언어) → 정책 get_action(절대 EEF) → rot6d→quat → mplib IK → env.step → success 판정. 입력은 SOURCE 이미지 데이터셋 h5(h5_add_images 출력 — episode_seed/label_metadata/tcp_pose 필요), LeRobot 디렉토리 아님. 평가 자체는 무과금(로컬 WSL)이나 떠 있는 정책 서버(gr00t_serve)는 과금 GPU 파드이므로 끝나면 runpod_down. 언어 명령은 환경의 instruction_template()에서 자동으로 읽는다(학습과 단일 출처). args = `<dataset-h5> --server-host <ip> [--count N] [--seed S] [--server-port 5555] [--action-steps 16] [--max-steps 0] [--task <id>]`.
 ---
 
 # gr00t_eval — GR00T 정책 sim 롤아웃 평가 (④-eval)
@@ -32,11 +32,11 @@ ManiSkill env 생성 → 에피소드 seed로 reset
    - 첫 번째 토큰 = 데이터셋 HDF5 경로. **필수.**
    - `--server-host <ip>` **필수** — 정책 서버 호스트.
    - `--count N` (기본 10; `0` = 전체), `--seed S` (재현 가능한 랜덤 샘플)
-   - `--instruction "..."` — `label_metadata` 키에 대한 **템플릿** (예: `"put the {target_id} cube in the bowl"`). 매 에피소드의 정답 라벨로 채워짐. **학습 때 쓴 지시문과 일치시킬 것** (다르면 일반화 테스트가 됨). 생략 시 라벨 자동 디코드.
+   - 언어 명령은 환경의 `instruction_template()` 에서 **자동으로** 읽는다(학습 `h5_to_lerobot` 과 동일한 단일 출처 → 문구 안 어긋남) — 넘길 인자 없음.
    - `--server-port` (기본 5555), `--action-steps` (replan당 실행 액션 수, ≤ 호라이즌, 기본 16), `--max-steps` (에피소드당 step budget, `0`=기록 길이), `--task <id>` (기본: 사이드카 `env_id`), `--sim-backend cpu`
 2. 프로젝트 루트에서 실행:
    ```
-   <maniskill-python> scripts/gr00t_eval.py --traj-path "<PATH>" --server-host <ip> [--count N] [--instruction "..."]
+   <maniskill-python> scripts/gr00t_eval.py --traj-path "<PATH>" --server-host <ip> [--count N]
    ```
 3. 결과 한 줄 보고: `episodes=N orig_success=.../N policy_success=.../N success_rate=... ik_fails=...`.
 
@@ -65,7 +65,7 @@ ManiSkill env 생성 → 에피소드 seed로 reset
 
 | 사용자 입력 | 결과 |
 |---|---|
-| `/gr00t_eval data/datasets/ColoredCubeInBowl-v1/motionplanning.rgb.pd_joint_pos.physx_cpu.h5 --server-host 1.2.3.4 --instruction "put the {target_id} cube in the bowl"` | 랜덤 10개 닫힌 루프 롤아웃 → 성공률 |
+| `/gr00t_eval data/datasets/ColoredCubeInBowl-v1/motionplanning.rgb.pd_joint_pos.physx_cpu.h5 --server-host 1.2.3.4` | 랜덤 10개 닫힌 루프 롤아웃 → 성공률 (명령은 환경 템플릿) |
 | `/gr00t_eval <hdf5> --server-host <ip> --count 0 --seed 42` | 전체 에피소드 평가(재현 가능) |
 
 흐름: `/gr00t_serve <model>`(서빙) → **`/gr00t_eval <소스 h5> --server-host <ip>`**(평가) → `/runpod_down`(종료).

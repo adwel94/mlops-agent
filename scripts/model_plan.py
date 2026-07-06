@@ -26,7 +26,6 @@ DEFAULTS = {
     "task_kind": "existing",          # existing | custom
     "env_id": "ThreeColoredCubes-v1",
     "description": "",                 # custom 일 때 자연어
-    "instruction": "pick the red cube",
     "target": 0.90,
     "episodes": 50,
     "seed": 0,
@@ -71,7 +70,8 @@ mission:
     kind: {task_kind}                  # existing | custom
     env_id: {env_id}                   # kind=existing 일 때 (지원목록은 /task_to_h5)
     description: "{description}"        # kind=custom 일 때 자연어 (예: "빨간 공을 그릇에")
-  instruction: "{instruction}"         # 평가·학습에 쓰는 언어 지시
+  # 언어 명령(instruction)은 환경(custom_envs.instruction_template)이 선언 — 학습·평가가 거기서
+  # 읽으므로 계획서엔 두지 않는다(문구 단일 출처, 어긋남 방지).
 
 goal:
   target_success_rate: {target}        # 이 점수 넘으면 완료
@@ -134,7 +134,7 @@ def run_create(out: str | None = None, **overrides) -> Path:
 
     rendered = TEMPLATE.format(
         name=v["name"], task_kind=v["task_kind"], env_id=v["env_id"],
-        description=v["description"], instruction=v["instruction"],
+        description=v["description"],
         target=v["target"], episodes=v["episodes"], seed=v["seed"],
         holdout_start_seed=v["holdout_start_seed"],
         data_source=v["data_source"], data_episodes=v["data_episodes"],
@@ -223,7 +223,7 @@ def _cli_create(a) -> int:
     ladder = [int(s) for s in a.ladder.split(",")] if a.ladder else None
     path = run_create(
         out=a.out, name=a.name, task_kind=a.task_kind, env_id=a.env_id,
-        description=a.description, instruction=a.instruction, target=a.target,
+        description=a.description, target=a.target,
         data_episodes=a.data_episodes, hf_dataset_repo=a.hf_dataset_repo,
         version=a.dataset_tag, hf_output_repo=a.hf_output_repo, ladder=ladder,
     )
@@ -251,7 +251,6 @@ def main(argv=None) -> int:
     c.add_argument("--task-kind", dest="task_kind", choices=sorted(_ENUMS["task_kind"]))
     c.add_argument("--env-id", dest="env_id")
     c.add_argument("--description")
-    c.add_argument("--instruction")
     c.add_argument("--target", type=float)
     c.add_argument("--data-episodes", dest="data_episodes", type=int)
     c.add_argument("--hf-dataset-repo", dest="hf_dataset_repo")

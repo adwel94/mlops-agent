@@ -135,10 +135,12 @@ def _stamp_robot_uids(dataset_json: Path, robot_uids: str | None) -> None:
 
 
 def _write_label_metadata(task: str, dataset_json: Path) -> None:
-    """If the env exposes label_metadata(), stamp it into the dataset's sidecar.
+    """Stamp the env-declared contract (label_metadata + instruction_template) into the sidecar.
 
-    Generic hook: makes the integer labels in obs/extra (e.g. target_id) decodable
-    from the dataset alone. Envs without the method are left untouched.
+    Generic hook: makes the integer labels in obs/extra (e.g. target_id) decodable from the
+    dataset alone, and records the env-owned language template so downstream (h5_to_lerobot)
+    reads the exact instruction the env declares — one source, no drift. Envs without a
+    given method are left untouched.
     """
     _ensure_custom_envs()  # robust if called standalone (custom task must be registered)
     try:
@@ -146,20 +148,25 @@ def _write_label_metadata(task: str, dataset_json: Path) -> None:
                        sim_backend="physx_cpu", render_backend="cpu")
     except Exception:
         return  # if we can't build it, just skip — metadata is best-effort
+    labels = template = None
     try:
         base = env.unwrapped
-        if not hasattr(base, "label_metadata"):
-            return
-        labels = base.label_metadata()
+        if hasattr(base, "label_metadata"):
+            labels = base.label_metadata()
+        if hasattr(base, "instruction_template"):
+            template = base.instruction_template()
     finally:
         env.close()
 
-    if not dataset_json.exists():
+    if (labels is None and template is None) or not dataset_json.exists():
         return
     meta = json.loads(dataset_json.read_text())
-    meta["label_metadata"] = labels
+    if labels is not None:
+        meta["label_metadata"] = labels
+    if template is not None:
+        meta["instruction_template"] = template
     dataset_json.write_text(json.dumps(meta, indent=2))
-    print(f"[h5_add_images] recorded label_metadata -> {labels}")
+    print(f"[h5_add_images] recorded label_metadata={labels} instruction_template={template!r}")
 
 
 def run(

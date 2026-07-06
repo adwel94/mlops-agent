@@ -69,7 +69,7 @@ def run(
         "\n[gr00t_serve] 서빙 파드 부팅 중 — 5555/tcp 가 뜨면 (RunPod 콘솔/`/runpod_ls` 에서\n"
         "  publicIp + 매핑포트 확인) 이 PC WSL 에서 평가 롤아웃:\n"
         "      python scripts/gr00t_eval.py --task <task> --traj-path <소스 rgb h5> \\\n"
-        "          --server-host <publicIp> --server-port <매핑포트> --instruction \"...\"\n"
+        "          --server-host <publicIp> --server-port <매핑포트>\n"
         f"  종료(과금 차단):  /runpod_down {pod_id}"
     )
     return pod_id

@@ -5,24 +5,23 @@
 # 특정 기본값을 바꾸려면 그 줄만 손으로 추가하면 오버라이드된다.
 
 mission:
-  name: model_plan.template
+  name: cubeinbowl-90
   task:
     kind: existing                  # existing | custom
-    env_id: ThreeColoredCubes-v1                   # kind=existing 일 때 (지원목록은 /task_to_h5)
+    env_id: ColoredCubeInBowl-v1                   # kind=existing 일 때 (지원목록은 /task_to_h5)
     description: ""        # kind=custom 일 때 자연어 (예: "빨간 공을 그릇에")
-  # 언어 명령(instruction)은 환경(custom_envs.instruction_template)이 선언 — 학습·평가가 거기서
-  # 읽으므로 계획서엔 두지 않는다(문구 단일 출처, 어긋남 방지).
+  # 언어 명령은 환경(ColoredCubeInBowl-v1 의 instruction_template)이 선언 — 학습·평가가 거기서 읽음.
 
 goal:
   target_success_rate: 0.9        # 이 점수 넘으면 완료
 
 data:
-  episodes: 100            # 학습 데이터 몇 개
-  hf_dataset_repo: adwel94/maniskill-threecubes-lerobot
-  dataset_tag: v2               # 데이터셋 스냅샷 태그 (불변; 바뀌면 새 태그)
+  episodes: 988            # 학습 데이터 몇 개 (기존 v1 데이터셋 재사용 — 재생성 안 함)
+  hf_dataset_repo: adwel94/maniskill-cubeinbowl-lerobot
+  dataset_tag: v1               # 데이터셋 스냅샷 태그 (불변; 바뀌면 새 태그)
 
 training:
-  hf_output_repo: adwel94/maniskill-threecubes-gr00t     # 학습된 모델 올릴 HF repo
+  hf_output_repo: adwel94/gr00t-cubeinbowl     # 학습된 모델 올릴 HF repo
 
 loop:
   step_ladder: [3000, 6000, 12000]                # 학습 스텝을 낮은 것부터 점진 (목표 도달까지 오름)

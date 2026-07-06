@@ -57,7 +57,6 @@ def run(
     max_steps: int = 0,
     budget_factor: float = 3.0,
     action_steps: int = 16,
-    instruction: str | None = None,
     sim_backend: str = "cpu",
     log_jsonl: str | Path | None = None,
     verbose: bool = False,
@@ -68,9 +67,9 @@ def run(
     A random `count` episodes (reproducible via `seed`); `count=0` = all. `max_steps=0`
     uses each recorded episode's length * `budget_factor` (default 3x) as the step budget
     (the policy is slower per step than the planner, so 1x starves it); `max_steps>0` sets
-    an absolute budget for all episodes. `instruction` is a template
-    over the dataset's label_metadata keys (e.g. "pick up the {target_id} cube"); when
-    omitted, the decoded label is used (must match what h5_to_lerobot trained on).
+    an absolute budget for all episodes. The language command is the env-declared
+    `instruction_template()` (read from the env in the WSL runner) — the same single source
+    h5_to_lerobot trains on, so eval and training phrasing can't drift.
     `task` defaults to the sidecar's env_id.
     """
     traj_path = Path(traj_path)
@@ -106,8 +105,6 @@ def run(
             "--sim-backend", sim_backend,
             "--log-jsonl", f'"{_win_to_wsl(log_jsonl)}"',
         ]
-        if instruction:
-            inner += ["--instruction", f'"{instruction}"']
         cmd = ["wsl.exe", "-d", WSL_DISTRO, "--", "bash", "-lc", " ".join(inner)]
     else:
         # macOS/Linux: 같은 env 의 파이썬으로 러너를 직접 실행 (WSL 계층 불필요;
@@ -126,8 +123,6 @@ def run(
             "--sim-backend", sim_backend,
             "--log-jsonl", str(log_jsonl),
         ]
-        if instruction:
-            cmd += ["--instruction", instruction]
     if verbose:
         print(f"[gr00t_eval] command:\n  {cmd}\n")
 
@@ -184,8 +179,6 @@ def _cli() -> None:
                    help="when --max-steps=0, budget = recorded episode length * this (default 3x)")
     p.add_argument("--action-steps", type=int, default=16,
                    help="actions executed per replan (<= GR00T action horizon)")
-    p.add_argument("--instruction", default=None,
-                   help="template over label_metadata keys, e.g. \"pick up the {target_id} cube\"")
     p.add_argument("--sim-backend", default="cpu")
     p.add_argument("--log-jsonl", default=None,
                    help="per-episode diagnostics output (default: <dataset>.eval_diag.jsonl)")
@@ -194,7 +187,6 @@ def _cli() -> None:
     run(args.traj_path, server_host=args.server_host, server_port=args.server_port,
         task=args.task, count=args.count, seed=args.seed, max_steps=args.max_steps,
         budget_factor=args.budget_factor, action_steps=args.action_steps,
-        instruction=args.instruction,
         sim_backend=args.sim_backend, log_jsonl=args.log_jsonl, verbose=args.verbose)
 
 

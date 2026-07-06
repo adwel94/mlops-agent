@@ -61,7 +61,7 @@ description: 모델 개발 "계획서"(plan_create 가 만든 실행 사양 YAML
    - `pre_approved`: 파드 생성 **자율** — 봉투는 계획서의 **유한한 `step_ladder`**(사다리를 다 돌면 끝). CLAUDE.md 규칙2 예외("유한한 step_ladder = 사전 선언된 봉투, plan_run 컨텍스트 한정")에 근거.
 3. **학습** — `/gr00t_train --max-steps <steps> --hf-dataset-repo <data repo> --hf-output-repo <training.hf_output_repo>` (+ `training.finetune_scope==full` 이면 `--full`). 학습 파드는 업로드 후 **자가종료**.
 4. **서빙** — `/gr00t_serve <업로드된 hf_model>`. 파드 IP/포트는 내가 직접 얻는다(`runpod_client.pod().portMappings` — CLAUDE.md 규칙3, 사용자에게 안 물음).
-5. **평가** — `/gr00t_eval <스테이지1 홀드아웃 h5> --server-host <ip> --count <goal.eval.episodes> --seed <goal.eval.seed> --instruction "<mission.instruction>"`. 성공률을 읽는다 (학습 안 쓴 씬 = eval v2).
+5. **평가** — `/gr00t_eval <스테이지1 홀드아웃 h5> --server-host <ip> --count <goal.eval.episodes> --seed <goal.eval.seed>`. 성공률을 읽는다 (학습 안 쓴 씬 = eval v2). 언어 명령은 환경(`instruction_template`)에서 자동으로 읽으므로 넘기지 않는다 — 학습과 같은 단일 출처.
 6. **파드 종료** — `auto_runpod_down` 이면 서빙 파드 `/runpod_down <id> --yes`(과금 중단·자율). `reconfirm` 이면 종료 **전에** 같은 체크포인트를 다른 seed 로 한 번 더 평가해 확인.
 7. **기록 & 안내** — `history` 에 `{steps, success}` 추가. MANIFEST 에 eval 기록(홀드아웃이므로 v2): `<maniskill-python> scripts/manifest.py set-eval <task> <model> <success> --method v2`. 사용자에게 진행 메시지(`notify.channel`): 예 *"6000스텝=0.80, 남은거리 1/3(0.093) 넘음 → 12000 진행"*. 1번으로 돌아감.
 

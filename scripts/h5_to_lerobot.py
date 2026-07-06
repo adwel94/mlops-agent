@@ -20,8 +20,10 @@ dependency, so the working conda env stays untouched. Targets codebase_version v
 is validated when GR00T ingests it (training box); regenerate stats/relative_stats with
 scripts/repair_lerobot_metadata.py there.
 
-Task-agnostic: the language instruction is built from the dataset's env-declared
-`label_metadata` via an `instruction` template (default emits the decoded label).
+Task-agnostic: the language instruction is built from the env-declared
+`instruction_template` (stamped into the sidecar by h5_add_images) with `label_metadata`
+decoding {target_id}. gr00t_eval reads the same env template, so training and eval phrasing
+can't drift. Tasks without a template fall back to the decoded label.
 
   - Python:  from scripts.h5_to_lerobot import run; run("data/.../*.rgb.*.h5")
   - CLI:     python scripts/h5_to_lerobot.py --traj-path data/.../*.rgb.*.h5
@@ -115,7 +117,6 @@ def run(
     traj_path: str | Path,
     out: str | Path | None = None,
     fps: int = 20,
-    instruction: str | None = None,
     camera: str | None = None,
     cameras: list[str] | None = None,
 ) -> Path:
@@ -135,6 +136,9 @@ def run(
     env_info = sidecar.get("env_info", {})
     env_id = env_info.get("env_id", "unknown")
     label_md = sidecar.get("label_metadata") or {}
+    # 언어 명령 틀 = 환경이 선언해 h5_add_images 가 sidecar 에 박은 값 (단일 출처).
+    # 평가(gr00t_eval)도 같은 환경에서 읽으므로 학습·평가 문구가 어긋나지 않는다.
+    template = sidecar.get("instruction_template")
 
     out = Path(out) if out else traj_path.parent / "lerobot"
     # clear prior data/videos so the output reflects EXACTLY this conversion — otherwise
@@ -192,7 +196,7 @@ def run(
                 decoded[k_lab] = names[int(np.asarray(extra[k_lab])[0])]
             except Exception:
                 pass
-        instr = _instruction(decoded, instruction, env_id)
+        instr = _instruction(decoded, template, env_id)
         tidx = tasks.setdefault(instr, len(tasks))
 
         # video: N frames -> one mp4 per camera (each into observation.images.<cam>/)
@@ -312,8 +316,6 @@ def _cli() -> None:
     p.add_argument("--traj-path", required=True)
     p.add_argument("--out", default=None)
     p.add_argument("--fps", type=int, default=20)
-    p.add_argument("--instruction", default=None,
-                   help="template using label_metadata keys, e.g. \"pick up the {target_id} cube\"")
     p.add_argument("--camera", default=None,
                    help="single explicit camera (backward-compat). Omit to discover all.")
     p.add_argument("--cameras", default=None,
@@ -321,7 +323,7 @@ def _cli() -> None:
     args = p.parse_args()
     cameras = args.cameras.split(",") if args.cameras else None
     out = run(args.traj_path, out=args.out, fps=args.fps,
-              instruction=args.instruction, camera=args.camera, cameras=cameras)
+              camera=args.camera, cameras=cameras)
     print(f"\nLeRobot dataset -> {out}")
 
 

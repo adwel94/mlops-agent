@@ -105,6 +105,20 @@ def _static(task: str, seed: int, sim_backend: str) -> list[_Check]:
         checks.append(_Check(
             "evaluate().success 존재", has_succ,
             "" if has_succ else f"evaluate() 가 'success' 키를 내야 함 (현재: {list(succ) if isinstance(succ, dict) else type(succ)})"))
+
+        # 언어 명령 틀 계약 — 학습(h5_to_lerobot)·평가(gr00t_eval)가 이 하나에서 읽어 문구
+        # 어긋남을 막는 단일 출처. {placeholder} 는 label_metadata 키로 채워져야(채움 실패 시
+        # 조용한 fallback → 학습≠평가). placeholder 없는 고정 문구도 허용(빈 집합 ⊆ 어떤 집합).
+        import string as _string
+        tmpl = env.unwrapped.instruction_template() if hasattr(env.unwrapped, "instruction_template") else None
+        ph = {f for _, f, _, _ in _string.Formatter().parse(tmpl) if f} if isinstance(tmpl, str) else set()
+        label_keys = set((env.unwrapped.label_metadata() or {}).keys()) if hasattr(env.unwrapped, "label_metadata") else set()
+        instr_ok = isinstance(tmpl, str) and bool(tmpl) and ph <= label_keys
+        checks.append(_Check(
+            "instruction_template() 존재·채움가능", instr_ok,
+            "" if instr_ok else
+            f"instruction_template() 가 문자열 틀을 내야 함(학습/평가 단일 출처). "
+            f"현재={tmpl!r}, placeholder={ph}, label_metadata 키={label_keys} — placeholder 는 그 키의 부분집합이어야 채워짐"))
     except Exception as e:
         checks.append(_Check("환경 인스턴스화", False,
                              f"{type(e).__name__}: {e}\n{traceback.format_exc()}"))

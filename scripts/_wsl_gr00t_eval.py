@@ -172,7 +172,6 @@ def main():
     p.add_argument("--max-steps", type=int, default=0)   # >0 = absolute budget (all eps); 0 = factor-based
     p.add_argument("--budget-factor", type=float, default=3.0)  # budget = recorded_len * factor (when max-steps=0)
     p.add_argument("--action-steps", type=int, default=16)  # executed per replan (<= horizon)
-    p.add_argument("--instruction", default=None)     # template over label_metadata keys
     p.add_argument("--sim-backend", default="cpu")
     p.add_argument("--log-jsonl", default=None)        # per-episode diagnostic records
     args = p.parse_args()
@@ -194,6 +193,9 @@ def main():
     env, base, solver, base_p, base_q = make_env_and_solver(
         args.task, sim_backend=args.sim_backend, obs_mode="rgb", robot_uids=robot_uids,
     )
+    # 언어 명령 틀 = 환경이 선언한 단일 출처(학습 h5_to_lerobot 과 동일 값을 읽음 → 문구 안 어긋남).
+    # env 인스턴스에서 바로 읽으므로 옛 데이터셋 sidecar 에 필드가 없어도 동작(마이그레이션 불필요).
+    template = base.instruction_template() if hasattr(base, "instruction_template") else None
     # success = grasped AND lifted clear of table; mirror the env's own threshold
     # (cube_half_size + 0.04) so the any-cube probe matches evaluate()'s logic.
     lift_thresh = float(getattr(base, "cube_half_size", 0.02)) + 0.04
@@ -231,7 +233,7 @@ def main():
         i = int(k.split("_")[1])
         ep = f[k]
         orig_succ += bool(np.asarray(ep["success"])[-1])
-        instr = _instruction(ep, label_md, args.instruction, env_id)
+        instr = _instruction(ep, label_md, template, env_id)
         seed = eps_meta[i].get("episode_seed", i) if i < len(eps_meta) else i
         # step budget: the policy is slower per step than the motion planner, so using the
         # recorded planner length as-is (1x) starves capable episodes at timeout. Default =

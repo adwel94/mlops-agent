@@ -18,7 +18,6 @@ description: 모델 개발 "계획서"(실행 사양 YAML)를 만드는 스킬. 
    | 계획 이름 | `--name` (안 주면 태스크에서 유추, 예 `threecubes-90`) |
    | 무슨 태스크 — 기존 env | `--task-kind existing --env-id <Id>-v1` |
    | 무슨 태스크 — 새 태스크(자연어) | `--task-kind custom --description "<자연어>"` |
-   | 언어 지시 | `--instruction "pick the red cube"` |
    | 목표 성공률 (예 "85%") | `--target 0.85` |
    | 학습 데이터 크기 | `--data-episodes N` |
    | HF repo | `--hf-dataset-repo …` · `--dataset-tag vN` · `--hf-output-repo …` |

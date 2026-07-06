@@ -8,11 +8,11 @@
 
 1. `args` 파싱:
    - 첫 번째 토큰 = 데이터셋 HDF5 경로 (`h5_add_images` 출력 — rgb + `obs/extra/tcp_pose` 필요). **필수.**
-   - 옵션 `--instruction "<template>"` — `label_metadata` 키로 지시문 생성 (예: `"pick up the {target_id} cube"`; 미지정 시 디코드된 라벨 값만)
+   - 지시문은 환경의 `instruction_template()` 에서 자동으로 읽는다(sidecar 경유; 평가 `gr00t_eval` 과 단일 출처 → 문구 안 어긋남). 템플릿 없는 태스크는 디코드된 라벨로 폴백.
    - 옵션 `--out <DIR>` (기본: 입력 옆 `lerobot/`), `--fps N` (기본 20), `--camera <name>`
 2. 프로젝트 루트에서 실행:
    ```
-   <maniskill-python> scripts/h5_to_lerobot.py --traj-path "<PATH>" [--instruction "..."]
+   <maniskill-python> scripts/h5_to_lerobot.py --traj-path "<PATH>"
    ```
 3. 출력 경로 + 요약(에피소드/프레임 수, tasks, action=10d 절대 EEF / state=qpos+eef) 보고.
 
@@ -43,8 +43,7 @@
 
 | 사용자 입력 | 결과 |
 |---|---|
-| `/h5_to_lerobot <hdf5>` | 전체 변환, 지시문=디코드 라벨 |
-| `/h5_to_lerobot <hdf5> --instruction "pick up the {target_id} cube"` | 자연어 지시문 |
+| `/h5_to_lerobot <hdf5>` | 전체 변환, 지시문=환경 `instruction_template` (없으면 디코드 라벨) |
 | `/h5_to_lerobot <hdf5> --out data/datasets/X/lerobot --fps 20` | 출력 위치·fps 지정 |
 
 보통 흐름: `/h5_add_images` → `/h5_report` → `/ee_verify`(게이트) → **`/h5_to_lerobot`(포장)** → GR00T 학습(클라우드).
