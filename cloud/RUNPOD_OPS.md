@@ -12,6 +12,8 @@
 | `cloud/common/read_logs.py --webhook $PIPELINE_WEBHOOK_URL` | PIPELINE 채널 마일스톤(🚀부팅·📦bootstrap·📥모델준비·🟢serve ready·❌실패). 메시지에 pod_id 가 박혀 있어 **이 파드가 준비됐나**를 잔상 없이 판단하는 정본. |
 | `cloud/train/wandb_status.py` | 학습 loss/lr 등 지표 |
 | `cloud/common/ai_report.py "msg"` | #ai-리포팅 채널로 내가 리포트를 보냄 |
+| `cloud/train/train_watch.py --pod-id <id>` | 학습 상태 한 번 훑기 — wandb+파드+HF 수집→분류(순항/STALL/완료/유실)→#ai-리포팅 발송을 **한 호출에 묶어** 확인·보고를 원자화(보고 빼먹기 방지). |
+| `cloud/common/poll.py --after N --do "<cmd>" --todo "<노트>"` | 슬립 래퍼 — 자고 `--do` 실행(학습이면 train_watch, 보고 강제)+`--todo` 되띄움. `run_in_background` 로 띄운다. |
 | BOOT_TIMING 채널 | 부팅 단계별 소요 — "부트스트랩 왜 느리지" 과거와 비교 (`read_logs.py --webhook`) |
 
 PIPELINE·RUNPOD 채널은 파드가 올린다 — 사람도 보고, 에이전트도 `read_logs.py --webhook`
