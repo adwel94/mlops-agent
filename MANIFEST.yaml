@@ -9,13 +9,6 @@
 threecubes:
   env_id: ThreeColoredCubes-v1
   datasets:
-    v1:
-      episodes: 1000
-      cameras:
-      - base_camera
-      repo: adwel94/maniskill-threecubes-lerobot
-      tag: v1
-      date: '2026-06-19'
     v2:
       episodes: 1000
       cameras:
@@ -26,24 +19,6 @@ threecubes:
       date: '2026-06-30'
       note: reaching-precision fix — v1 과 같은 1000 궤적을 손목캠 추가해 재생성
   models:
-    v1-s3000:
-      dataset: v1
-      steps: 3000
-      full: false
-      repo: adwel94/gr00t-threecubes-ft
-      tag: null
-      eval: 0.2
-      eval_method: v1
-      date: '2026-06-19'
-    v1-s20000:
-      dataset: v1
-      steps: 20000
-      full: false
-      repo: adwel94/gr00t-threecubes
-      tag: v1-s20000
-      eval: 0.18
-      eval_method: v1
-      date: '2026-06-26'
     v2-s3000:
       dataset: v2
       steps: 3000
@@ -75,6 +50,14 @@ cubeinbowl:
       repo: adwel94/maniskill-cubeinbowl-lerobot
       tag: v1
       date: '2026-07-02'
+    v2:
+      episodes: 1985
+      cameras:
+      - base_camera
+      - hand_camera
+      repo: adwel94/maniskill-cubeinbowl-lerobot
+      tag: v2
+      date: '2026-07-07'
   models:
     v1-s1000:
       dataset: v1
