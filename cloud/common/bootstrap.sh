@@ -36,6 +36,9 @@ echo "==> Isaac-GR00T clone (shallow, no submodules, LFS 스킵)"
 # 서브모듈(LIBERO/SimplerEnv/robocasa)은 GR00T eval 벤치마크용 — 서빙·우리 학습엔 불필요.
 # pyproject 에 external_dependencies 경로 의존성 없음 확인됨 → 빼도 uv sync 정상.
 # --depth 1 로 히스토리도 트림(클론 가속). 서빙·학습 양쪽 부팅 단축.
+# --branch n1.7-release 로 태그 핀 — 우리 모델군이 N1.7-3B 이고 이 태그가 requires-python
+#   ==3.10.* 이라 아래 uv sync --python 3.10 과 맞는다. 핀 없이 main 을 받으면 NVIDIA 가
+#   릴리스 후 올린 requires-python(>=3.12)에 uv sync 가 깨진다(관측됨). 태그=불변 → 재현성.
 # LFS 스킵(GIT_LFS_SKIP_SMUDGE): repo 의 LFS 자산(~158MB 데모 미디어 등)은 서빙/학습에
 #   불필요한데, 느린 호스트에서 이 LFS 체크아웃(Filtering content)이 KiB/s 로 기어가
 #   clone 을 통째로 막는다(오늘 관측). 포인터만 받고 blob 은 건너뛴다 → 코드만 받아 빠름.
@@ -47,7 +50,7 @@ git config --global http.lowSpeedTime 20
 if [ ! -d "${GR00T_DIR}/.git" ]; then
     _cloned=0
     for i in 1 2 3; do
-        if timeout 180 git clone --depth 1 https://github.com/NVIDIA/Isaac-GR00T "${GR00T_DIR}"; then
+        if timeout 180 git clone --depth 1 --branch n1.7-release https://github.com/NVIDIA/Isaac-GR00T "${GR00T_DIR}"; then
             _cloned=1; break
         fi
         echo "    clone 시도 ${i} 실패/타임아웃 — 정리 후 재시도"
