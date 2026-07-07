@@ -14,6 +14,7 @@
 | `cloud/common/ai_report.py "msg"` | #ai-리포팅 채널로 내가 리포트를 보냄 |
 | `cloud/train/train_watch.py --pod-id <id>` | 학습 상태 한 번 훑기 — wandb+파드+HF 수집→분류(순항/STALL/완료/유실)→#ai-리포팅 발송을 **한 호출에 묶어** 확인·보고를 원자화(보고 빼먹기 방지). |
 | `cloud/common/poll.py --after N --do "<cmd>" --todo "<노트>"` | 슬립 래퍼 — 자고 `--do` 실행(학습이면 train_watch, 보고 강제)+`--todo` 되띄움. `run_in_background` 로 띄운다. |
+| `cloud/common/eval_watch.py --diag <eval_diag.jsonl> --total N` | 평가 진행 한 번 훑기 — eval_diag.jsonl 읽어 진행률·성공률·**실패사유 분해**(못집음/틀린색/배치실패)→#ai-리포팅 발송. STALL(진전 0) 감지. `poll.py --do` 의 평가단계 내용물. |
 | BOOT_TIMING 채널 | 부팅 단계별 소요 — "부트스트랩 왜 느리지" 과거와 비교 (`read_logs.py --webhook`) |
 
 PIPELINE·RUNPOD 채널은 파드가 올린다 — 사람도 보고, 에이전트도 `read_logs.py --webhook`
