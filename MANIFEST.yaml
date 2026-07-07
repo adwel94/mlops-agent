@@ -85,13 +85,23 @@ cubeinbowl:
       eval: null
       date: '2026-07-02'
       image: adwel94/maniskill-gr00t-train:latest
-    v0-s3000:
-      dataset: v0
+    v1-s3000:
+      dataset: v1
       steps: 3000
       full: false
       repo: adwel94/gr00t-cubeinbowl
-      tag: v0-s3000
+      tag: v1-s3000
       eval: 0.18
       date: '2026-07-06'
+      image: adwel94/maniskill-gr00t-train:latest
+      eval_method: v2
+    v1-s7500:
+      dataset: v1
+      steps: 7500
+      full: false
+      repo: adwel94/gr00t-cubeinbowl
+      tag: v1-s7500
+      eval: 0.673
+      date: '2026-07-07'
       image: adwel94/maniskill-gr00t-train:latest
       eval_method: v2
