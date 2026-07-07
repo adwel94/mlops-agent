@@ -61,6 +61,10 @@ def run(
     num_gpus: int = 1,
     full: bool = False,
     task: str | None = None,
+    base_model: str | None = None,
+    resume_from: str | None = None,
+    ckpt_name: str = "latest",
+    save_ckpt: bool = True,
     volume: int = DEFAULT_VOLUME_GB,
     container_disk: int = DEFAULT_DISK_GB,
     image: str = DEFAULT_IMAGE,
@@ -117,6 +121,20 @@ def run(
         env["TUNE_LLM"] = "true"
         env["TUNE_VISUAL"] = "true"
 
+    # --- resume(A) / warm-start(B) / 체크포인트 보존 ---
+    # 저장: 최신 체크포인트를 ckpt-<name> 브랜치에 (기본 ckpt-latest, 매 런 덮어씀).
+    env["SAVE_CKPT"] = "true" if save_ckpt else "false"
+    env["CKPT_BRANCH"] = f"ckpt-{ckpt_name}"
+    # A) full resume — 같은 데이터로 이어감: ckpt-<name> 브랜치의 체크포인트에서 트레이너 상태 복원.
+    if resume_from:
+        env["RESUME_CKPT_REF"] = f"ckpt-{resume_from}"
+        env["RESUME_FROM_CHECKPOINT"] = "true"
+    # B) warm-start — 데이터 바꿔 분기: repo@태그 최종 모델(가중치)만 base 로.
+    #    flow(prepare_base_model)가 고정 경로로 받고, 학습은 이 env 로 그 경로를 base 로 씀.
+    if base_model:
+        env["BASE_MODEL_REF"] = base_model
+        env["BASE_MODEL_PATH"] = "/workspace/base_model"
+
     pod_id = create(
         name=name, image_name=image, gpu_id=gpu, gpu_count=num_gpus,
         volume=volume, container_disk=container_disk, cloud_type=cloud_type,
@@ -167,6 +185,14 @@ def _cli() -> None:
                    help="유지할 체크포인트 수 (기본 1=최신만; 누적 방지)")
     p.add_argument("--num-gpus", type=int, default=1)
     p.add_argument("--full", action="store_true", help="llm+visual 까지 전체 학습 (A100 80GB 권장)")
+    p.add_argument("--base-model", default=None,
+                   help="warm-start: base 로 쓸 최종 모델 repo[@rev] (가중치만; 데이터 바꿔 분기용)")
+    p.add_argument("--resume-from", default=None,
+                   help="full resume: 이어받을 체크포인트 이름 (예: latest → 브랜치 ckpt-latest; 같은 데이터)")
+    p.add_argument("--ckpt-name", default="latest",
+                   help="이 런의 체크포인트를 저장할 이름 → 브랜치 ckpt-<name> (기본 latest, 덮어씀)")
+    p.add_argument("--no-save-ckpt", dest="save_ckpt", action="store_false",
+                   help="학습 후 체크포인트 보존 안 함 (기본은 ckpt-latest 에 저장)")
     p.add_argument("--volume", type=int, default=DEFAULT_VOLUME_GB)
     p.add_argument("--container-disk", type=int, default=DEFAULT_DISK_GB)
     p.add_argument("--image", default=DEFAULT_IMAGE)
@@ -177,6 +203,8 @@ def _cli() -> None:
         global_batch_size=args.global_batch_size, learning_rate=args.learning_rate,
         save_steps=args.save_steps, save_total_limit=args.save_total_limit,
         num_gpus=args.num_gpus, full=args.full, task=args.task,
+        base_model=args.base_model, resume_from=args.resume_from,
+        ckpt_name=args.ckpt_name, save_ckpt=args.save_ckpt,
         volume=args.volume, container_disk=args.container_disk, image=args.image,
         cloud_type=args.cloud_type)
 

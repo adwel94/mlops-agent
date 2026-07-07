@@ -61,6 +61,13 @@ class FlowParameters(BaseModel):
     hf_output_branch: str = "main"       # 최종 모델이 올라갈 브랜치 (main = 최신)
     hf_output_tag: str = ""              # 이 런의 불변 태그 (예: v1-s3000) — 업로드 후 박음
 
+    # --- resume(A) / warm-start(B) 배선 ---
+    # 최종 모델(main+태그)은 서빙·warm-start 출발점, 학습 상태(체크포인트)는 아래 별도 브랜치.
+    save_ckpt: bool = True               # 학습 후 최신 체크포인트를 ckpt_branch 에 보존 (resume 용)
+    ckpt_branch: str = "ckpt-latest"     # 체크포인트를 저장할 브랜치 (매 런 덮어씀 = "마지막만")
+    resume_ckpt_ref: str = ""            # 이 브랜치에서 체크포인트를 받아 full resume (같은 데이터 이어감)
+    base_model_ref: str = ""             # repo@rev 최종 모델을 base 로 받아 warm-start (데이터 바꿔 분기)
+
     # --- 비밀/인프라 (env 에서) ---
     hf_token: str = ""
     runpod_api_key: str = ""
@@ -81,6 +88,10 @@ class FlowParameters(BaseModel):
             hf_output_repo=os.environ.get("HF_OUTPUT_REPO", ""),
             hf_output_branch=os.environ.get("HF_OUTPUT_BRANCH", "main"),
             hf_output_tag=os.environ.get("HF_OUTPUT_TAG", ""),
+            save_ckpt=os.environ.get("SAVE_CKPT", "true").strip().lower() not in ("0", "false", "no", "off"),
+            ckpt_branch=os.environ.get("CKPT_BRANCH", "ckpt-latest"),
+            resume_ckpt_ref=os.environ.get("RESUME_CKPT_REF", ""),
+            base_model_ref=os.environ.get("BASE_MODEL_REF", ""),
             hf_token=os.environ.get("HF_TOKEN", ""),
             runpod_api_key=os.environ.get("RUNPOD_API_KEY", ""),
             runpod_pod_id=os.environ.get("RUNPOD_POD_ID", ""),

@@ -3,8 +3,11 @@
 [1/6] load_config        — env → FlowParameters
 [2/6] prepare_dataset    — HF Hub → /workspace/lerobot
 [3/6] repair_metadata    — GR00T repair_lerobot_metadata (stats/relative_stats 재생성)
+[3.5] prepare_base_model — (base_model_ref 시) warm-start base 가중치 fetch → /workspace/base_model
+[3.5] prepare_resume     — (resume_ckpt_ref 시) ckpt 브랜치 체크포인트 → experiment 디렉토리 (full resume)
 [4/6] train              — uv run _gr00t_train.py (gr00t venv 서브프로세스; Discord 콜백 주입)
-[5/6] upload_checkpoint  — 최종 모델(run-root, 체크포인트 제외) → HF (hf_output_repo 있을 때)
+[5/6] upload_checkpoint  — 최종 모델(run-root, 체크포인트 제외) → HF main+태그 (서빙용)
+[5.5] upload_resume_checkpoint — (save_ckpt 시) 최신 체크포인트 전체 → ckpt 브랜치 (resume용, 덮어씀)
 [6/6] request_termination — 외부 Cloudflare Worker(cloud/reaper)에 3초마다 종료요청 (finally; Worker가 실제 DELETE)
 
 이 flow 는 시스템 python(prefect/wandb/hf/requests)에서 돌고, 무거운 학습만 gr00t
@@ -91,6 +94,61 @@ def repair_metadata(p: FlowParameters) -> None:
         f'cd "{GR00T_DIR}" && uv run python scripts/repair_lerobot_metadata.py '
         f'"{p.training.dataset_dir}" --embodiment-tag {p.training.embodiment_tag}'
     )
+
+
+# ---------------------------------------------------------------------------
+# [3.5] prepare_base_model / prepare_resume — 이어학습 배선 (선택)
+# ---------------------------------------------------------------------------
+
+def _split_ref(ref: str) -> tuple[str, str | None]:
+    """`repo@rev` → (repo, rev). @ 없으면 rev=None(main)."""
+    return tuple(ref.split("@", 1)) if "@" in ref else (ref, None)
+
+
+@task(name="prepare_base_model", retries=2, retry_delay_seconds=15)
+def prepare_base_model(p: FlowParameters) -> None:
+    """warm-start(B): repo@rev 의 최종 모델(가중치)만 받아 base 로 삼는다 (체크포인트 제외).
+
+    데이터/설정을 바꿔 분기할 때 — 옵티마이저·LR 은 새로 시작하고 가중치만 이어받는다.
+    받은 로컬 경로를 base_model_path 로 꽂으면 _gr00t_train 의 start_from_checkpoint 가 그걸 씀.
+    """
+    repo, rev = _split_ref(p.base_model_ref)
+    # dest = launch_train 이 박아둔 BASE_MODEL_PATH(고정 경로). 학습 서브프로세스는 그 env 로
+    # 이 경로를 base 로 쓰므로(신뢰 채널=env), 여기선 그 경로에 받기만 하면 된다.
+    dest = p.training.base_model_path
+    print(f"[3.5] prepare_base_model — warm-start base {repo}@{rev or 'main'} -> {dest} (체크포인트 제외)")
+    from huggingface_hub import snapshot_download
+
+    snapshot_download(
+        repo_id=repo, revision=rev, local_dir=dest, token=p.hf_token or None,
+        ignore_patterns=["*checkpoint-*", "*optimizer.pt", "*scheduler.pt", "*rng_state*.pth", "gr00t-ft-*"],
+    )
+    print(f"  base_model_path -> {dest}")
+
+
+@task(name="prepare_resume", retries=2, retry_delay_seconds=15)
+def prepare_resume(p: FlowParameters) -> None:
+    """full resume(A): ckpt 브랜치의 체크포인트를 **이 런의 experiment 디렉토리**로 받는다.
+
+    체크포인트는 output_dir/<experiment_name>/checkpoint-N 에 놓여야 트레이너의
+    resume_from_checkpoint=True(get_last_checkpoint)가 찾는다. experiment_name 은 파드마다
+    다르므로(gr00t-ft-<pod_id>) 원 체크포인트를 새 experiment 디렉토리에 심는다.
+    """
+    if not p.hf_output_repo:
+        raise RuntimeError("resume 하려면 hf_output_repo(체크포인트 브랜치가 있는 repo)가 필요")
+    dest = str(Path(p.training.output_dir) / _run_name(p))
+    print(f"[3.5] prepare_resume — {p.hf_output_repo}@{p.resume_ckpt_ref} -> {dest}")
+    from huggingface_hub import snapshot_download
+
+    snapshot_download(
+        repo_id=p.hf_output_repo, revision=p.resume_ckpt_ref, local_dir=dest, token=p.hf_token or None,
+    )
+    ckpts = sorted(Path(dest).glob("checkpoint-*"))
+    if not ckpts:
+        raise FileNotFoundError(f"resume ref '{p.resume_ckpt_ref}' 에 checkpoint-* 없음 -> {dest}")
+    if not any((ckpts[-1] / f).exists() for f in ("optimizer.pt",)):
+        print(f"  [warn] {ckpts[-1].name} 에 optimizer.pt 없음 — full resume 이 옵티마이저를 복원 못할 수 있음")
+    print(f"  resume checkpoint ready: {ckpts[-1]}")
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +273,63 @@ def upload_checkpoint(p: FlowParameters) -> None:
 
 
 # ---------------------------------------------------------------------------
+# [5.5] upload_resume_checkpoint — 최신 체크포인트를 ckpt 브랜치에 보존 (resume 용)
+# ---------------------------------------------------------------------------
+
+def _latest_checkpoint_dir(output_dir: str, run_name: str) -> str | None:
+    """resume 용 최신 checkpoint-* 디렉토리 (옵티마이저/스케줄러 포함). 최종 모델과 별개."""
+    for parent in (Path(output_dir) / run_name, Path(output_dir)):
+        ckpts = sorted(
+            (d for d in parent.glob("checkpoint-*") if d.is_dir()),
+            key=lambda d: int(d.name.split("-")[1]) if d.name.split("-")[1].isdigit() else -1,
+        )
+        if ckpts:
+            return str(ckpts[-1])
+    return None
+
+
+@task(name="upload_resume_checkpoint", retries=2, retry_delay_seconds=15)
+def upload_resume_checkpoint(p: FlowParameters) -> None:
+    """최신 체크포인트(가중치+옵티마이저+스케줄러+rng)를 ckpt_branch 에 통째로 올린다.
+
+    최종 모델(main+태그)과 달리 **아무것도 제외 안 함** — full resume 이 이걸 이어받는다.
+    브랜치는 매 런 **덮어써서**(delete_patterns) 항상 "마지막 하나"만 = 용량 고정.
+    체크포인트는 checkpoint-N/ 구조로 올려(experiment 디렉토리 파일은 제외) resume fetch 가 복원.
+    """
+    if not p.hf_output_repo or not p.save_ckpt:
+        print("[5.5] upload_resume_checkpoint — skip (hf_output_repo 미설정 또는 save_ckpt=false)")
+        return
+    pod_id = p.runpod_pod_id or "local"
+    run_name = _run_name(p)
+    ckpt_dir = _latest_checkpoint_dir(p.training.output_dir, run_name)
+    if not ckpt_dir:
+        print("[5.5] upload_resume_checkpoint — checkpoint-* 없음 (save_steps>max_steps?) — skip")
+        send_discord(f"⚠️ *[ckpt] 체크포인트 없음 — resume 저장 skip* pod=`{pod_id}`",
+                     channel=DiscordChannel.PIPELINE)
+        return
+    # 업로드 소스 = experiment 디렉토리(그 안의 checkpoint-*/ 만 allow) → 브랜치에 checkpoint-N/ 로 보존.
+    src = str(Path(ckpt_dir).parent)
+    print(f"[5.5] upload_resume_checkpoint — {ckpt_dir} -> {p.hf_output_repo}@{p.ckpt_branch} (전체 상태, 덮어씀)")
+    send_discord(f"💾 *[ckpt] resume 체크포인트 저장* `{Path(ckpt_dir).name}` → `{p.hf_output_repo}@{p.ckpt_branch}`\npod=`{pod_id}`",
+                 channel=DiscordChannel.PIPELINE)
+
+    from huggingface_hub import HfApi
+
+    api = HfApi(token=p.hf_token or None)
+    api.create_repo(p.hf_output_repo, exist_ok=True)
+    api.create_branch(repo_id=p.hf_output_repo, branch=p.ckpt_branch, exist_ok=True)
+    api.upload_folder(
+        folder_path=src,
+        repo_id=p.hf_output_repo,
+        revision=p.ckpt_branch,
+        allow_patterns=["*checkpoint-*"],   # experiment 루트의 최종모델 파일 제외, checkpoint-N/ 만
+        delete_patterns=["*"],              # 이전 체크포인트 제거 → 항상 최신 하나만
+        commit_message=f"resume checkpoint {Path(ckpt_dir).name} (max_steps={p.training.max_steps})",
+    )
+    print(f"  uploaded -> https://huggingface.co/{p.hf_output_repo}/tree/{p.ckpt_branch}")
+
+
+# ---------------------------------------------------------------------------
 # [6/6] request_termination (외부 Worker 가 실제 삭제)
 # ---------------------------------------------------------------------------
 
@@ -302,8 +417,13 @@ def train_flow():
 
         prepare_dataset(p)
         repair_metadata(p)
+        if p.base_model_ref:
+            prepare_base_model(p)   # warm-start(B): 가중치만 이어받고 데이터 바꿔 분기
+        if p.resume_ckpt_ref:
+            prepare_resume(p)       # full resume(A): 체크포인트를 experiment 디렉토리로
         train(p)
-        upload_checkpoint(p)
+        upload_checkpoint(p)        # 최종 모델 → main + 태그 (서빙용)
+        upload_resume_checkpoint(p) # 최신 체크포인트 → ckpt 브랜치 (resume용, save_ckpt 시)
 
         send_discord(f"✅ *GR00T 학습 파이프라인 완료*\npod=`{pod_id}`", channel=DiscordChannel.PIPELINE)
         print("ALL DONE")
