@@ -28,8 +28,8 @@ from pathlib import Path
 
 import gymnasium as gym
 
-# Opt-in robot override for replay (e.g. "panda_wristcam" adds a hand_camera). None =
-# keep whatever the source trajectory used (the default 1-cam panda). Set in run().
+# Robot used for the replay render. Default "panda_wristcam" = base_camera + hand_camera
+# (2캠, 정밀 레시피 표준). Pass "panda" to fall back to the legacy 1-cam set. Set in run().
 _REPLAY_ROBOT_UIDS: str | None = None
 
 _orig_make = gym.make
@@ -123,7 +123,7 @@ def _stamp_robot_uids(dataset_json: Path, robot_uids: str | None) -> None:
     """Record the replay agent in the dataset sidecar's env_info.
 
     Downstream (h5_to_lerobot discovers cameras from the data; eval/ee_verify read this to
-    build a matching env). No-op when robot_uids is None (the default panda — already implied).
+    build a matching env). No-op when robot_uids is None (falls back to panda — nothing to record).
     """
     if not robot_uids or not dataset_json.exists():
         return
@@ -180,14 +180,14 @@ def run(
     save_traj: bool = True,
     save_video: bool = False,
     verbose: bool = False,
-    robot_uids: str | None = None,
+    robot_uids: str | None = "panda_wristcam",
 ) -> Path:
     """Generate `count` episodes by replaying an action trajectory.
 
-    robot_uids: opt-in agent override for the replay (e.g. "panda_wristcam" to record a
-    wrist hand_camera alongside base_camera). None = keep the source's panda (1-cam,
-    backward-compatible). The arm kinematics are identical, so the recorded joint actions
-    replay unchanged; the chosen robot is stamped into the output sidecar so downstream
+    robot_uids: agent for the replay render. Default "panda_wristcam" = base_camera +
+    hand_camera (2캠, the precision-recipe standard). Pass "panda" for the legacy 1-cam
+    set. The arm kinematics are identical either way, so the recorded joint actions replay
+    unchanged; the chosen robot is stamped into the output sidecar so downstream
     (h5_to_lerobot / eval / ee_verify) discovers the camera set without guessing.
 
     Returns the path to the produced HDF5 dataset.
@@ -278,9 +278,9 @@ def _cli() -> None:
                    help="Skip writing the output HDF5")
     p.add_argument("--save-video", action="store_true")
     p.add_argument("--verbose", action="store_true")
-    p.add_argument("--robot-uids", default=None,
-                   help="opt-in agent override for replay, e.g. panda_wristcam "
-                        "(adds a wrist hand_camera). Omit to keep the source's panda (1-cam).")
+    p.add_argument("--robot-uids", default="panda_wristcam",
+                   help="replay agent (default panda_wristcam = base+hand 2캠, 표준). "
+                        "Pass 'panda' for the legacy 1-cam set.")
     args = p.parse_args()
     out = run(
         task=args.task,

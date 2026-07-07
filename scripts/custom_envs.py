@@ -37,6 +37,11 @@ CUBE_COLORS = [
 class ThreeColoredCubesEnv(PickCubeEnv):
     """Three colored cubes randomly placed on the table (no goal/grasp yet)."""
 
+    # panda(1캠 base_camera, 레거시) + panda_wristcam(2캠 +hand_camera, 표준). 데이터는
+    # h5_add_images 가 기본 panda_wristcam 으로 렌더한다(2캠이 정밀 레시피). 여기 등록으로
+    # gym.make(robot_uids="panda_wristcam") 시 "not in supported robots" 경고를 없앤다.
+    SUPPORTED_ROBOTS = ["panda", "panda_wristcam"]
+
     @property
     def _default_human_render_camera_configs(self):
         # zoom the preview camera onto the cube workspace (parent's view is wide)
@@ -169,6 +174,11 @@ class ColoredCubeInBowlEnv(PickCubeEnv):
     'base_camera' (inherited from PickCubeEnv), tcp_pose in _get_obs_extra,
     evaluate() -> {"success": ...}, and label_metadata() for the color decoder.
     """
+
+    # panda(1캠 base_camera, 레거시) + panda_wristcam(2캠 +hand_camera, 표준). 데이터는
+    # h5_add_images 가 기본 panda_wristcam 으로 렌더한다(2캠이 정밀 레시피). 여기 등록으로
+    # gym.make(robot_uids="panda_wristcam") 시 "not in supported robots" 경고를 없앤다.
+    SUPPORTED_ROBOTS = ["panda", "panda_wristcam"]
 
     # bowl tray geometry (half-extents, metres)
     bowl_wall_half = 0.005       # half thickness of floor/walls
