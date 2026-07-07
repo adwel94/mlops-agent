@@ -36,9 +36,13 @@ echo "==> Isaac-GR00T clone (shallow, no submodules, LFS 스킵)"
 # 서브모듈(LIBERO/SimplerEnv/robocasa)은 GR00T eval 벤치마크용 — 서빙·우리 학습엔 불필요.
 # pyproject 에 external_dependencies 경로 의존성 없음 확인됨 → 빼도 uv sync 정상.
 # --depth 1 로 히스토리도 트림(클론 가속). 서빙·학습 양쪽 부팅 단축.
-# --branch n1.7-release 로 태그 핀 — 우리 모델군이 N1.7-3B 이고 이 태그가 requires-python
-#   ==3.10.* 이라 아래 uv sync --python 3.10 과 맞는다. 핀 없이 main 을 받으면 NVIDIA 가
-#   릴리스 후 올린 requires-python(>=3.12)에 uv sync 가 깨진다(관측됨). 태그=불변 → 재현성.
+# 커밋 SHA 로 핀(GR00T_PIN) — 우리 검증된 모델(threecubes v2·cubeinbowl)이 실제로 받았던
+#   main tip 이 이 커밋(2026-06-24)이다. 이후 07-07 GA 커밋(1a1837f2)이 main 을 Python 3.12·
+#   Torch 2.9 로 올려 `uv sync --python 3.10` 이 깨졌고(관측), 동시에 우리 flow 가 쓰는
+#   scripts/repair_lerobot_metadata.py 는 n1.7-release 태그(04-18)엔 아직 없다 → 태그로도
+#   못 핀한다. 그래서 "3.10 이면서 repair 스크립트가 있는" 마지막 커밋 = 이 SHA 로 고정.
+#   태그/브랜치만 받는 --branch 로는 임의 SHA 를 못 받으므로 init+fetch --depth 1 <SHA>+checkout.
+#   (GitHub 는 allowAnySHA1InWant 라 SHA 직접 fetch 가능.) SHA=불변 → floating 의존성 영구 제거.
 # LFS 스킵(GIT_LFS_SKIP_SMUDGE): repo 의 LFS 자산(~158MB 데모 미디어 등)은 서빙/학습에
 #   불필요한데, 느린 호스트에서 이 LFS 체크아웃(Filtering content)이 KiB/s 로 기어가
 #   clone 을 통째로 막는다(오늘 관측). 포인터만 받고 blob 은 건너뛴다 → 코드만 받아 빠름.
@@ -47,17 +51,23 @@ echo "==> Isaac-GR00T clone (shallow, no submodules, LFS 스킵)"
 export GIT_LFS_SKIP_SMUDGE=1
 git config --global http.lowSpeedLimit 1000
 git config --global http.lowSpeedTime 20
+GR00T_PIN=ab88b50c718f6528e1df9dcbaf75865d1b604760   # 3.12 GA(1a1837f2, 07-07) 직전 마지막 3.10 커밋 (2026-06-24)
 if [ ! -d "${GR00T_DIR}/.git" ]; then
     _cloned=0
     for i in 1 2 3; do
-        if timeout 180 git clone --depth 1 --branch n1.7-release https://github.com/NVIDIA/Isaac-GR00T "${GR00T_DIR}"; then
+        if timeout 180 bash -c "
+            git init -q '${GR00T_DIR}' &&
+            cd '${GR00T_DIR}' &&
+            git remote add origin https://github.com/NVIDIA/Isaac-GR00T &&
+            git fetch --depth 1 origin '${GR00T_PIN}' &&
+            git checkout -q FETCH_HEAD"; then
             _cloned=1; break
         fi
-        echo "    clone 시도 ${i} 실패/타임아웃 — 정리 후 재시도"
+        echo "    fetch 시도 ${i} 실패/타임아웃 — 정리 후 재시도"
         rm -rf "${GR00T_DIR}"
         sleep 5
     done
-    [ "${_cloned}" -eq 1 ] || { echo "❌ Isaac-GR00T clone 3회 실패 — GitHub 도달 불가 호스트"; exit 1; }
+    [ "${_cloned}" -eq 1 ] || { echo "❌ Isaac-GR00T fetch(SHA) 3회 실패 — GitHub 도달 불가 호스트"; exit 1; }
 else
     echo "    이미 존재 — skip"
 fi
