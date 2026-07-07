@@ -33,8 +33,35 @@ CUBE_COLORS = [
 ]
 
 
+class _ColoredCubeDiagnosis:
+    """색-큐브 집기 계열이 '실패 사유'를 선언하는 계약 (CLAUDE.md 코드교차 규칙 1).
+
+    성공/실패(success)만 판정하던 태스크가 실패의 '이유'까지 선언하면, 소비자
+    (gr00t_eval 러너·eval_watch)는 그 라벨의 뜻을 모른 채 세기만 해도 되어 태스크별
+    코드가 사라진다 — 카메라·라벨을 env 가 선언하듯 실패 사유도 env 가 선언한다.
+
+    계약 둘:
+      - DIAGNOSTIC_KEYS: evaluate() 가 매 스텝 내놓는 진단 불리언 이름들(순간값). 러너가
+        에피소드 내내 OR 로 누적한다("한 번이라도 X 했나"). 러너는 키 뜻을 모른다.
+      - classify_outcome(rollup): 누적 rollup + 최종 success 를 사람이 읽는 사유 라벨로.
+        새 태스크는 이 둘만 자기 env 에 선언하면 소비자 코드 불변으로 편입된다.
+    """
+    # evaluate() 의 진단 불리언 — 러너가 에피소드 동안 OR 누적(순간값→"한 번이라도").
+    DIAGNOSTIC_KEYS = ("grasped_any", "grasped_target")
+
+    def classify_outcome(self, rollup: dict) -> str:
+        """rollup = {success(최종), grasped_any(누적), grasped_target(누적)} → 사유 라벨."""
+        if rollup.get("success"):
+            return "성공"
+        if not rollup.get("grasped_any"):
+            return "못집음"      # 아무 큐브도 못 집음 (리칭/그랩 실패)
+        if not rollup.get("grasped_target"):
+            return "틀린색"      # 집었지만 타겟 색이 아님 (색 접지 실패)
+        return "미완"            # 타겟을 집었으나 완결 못함 (배치/리프트 실패)
+
+
 @register_env("ThreeColoredCubes-v1", max_episode_steps=50)
-class ThreeColoredCubesEnv(PickCubeEnv):
+class ThreeColoredCubesEnv(_ColoredCubeDiagnosis, PickCubeEnv):
     """Three colored cubes randomly placed on the table (no goal/grasp yet)."""
 
     # panda(1캠 base_camera, 레거시) + panda_wristcam(2캠 +hand_camera, 표준). 데이터는
@@ -135,7 +162,11 @@ class ThreeColoredCubesEnv(PickCubeEnv):
         idx = self.target_id.to(self.device)
         tgt_grasped = grasped[idx, ar]
         tgt_lifted = heights[idx, ar] > (self.cube_half_size + 0.04)
-        return {"success": tgt_grasped & tgt_lifted, "is_grasped": tgt_grasped}
+        # 진단 불리언(순간값): DIAGNOSTIC_KEYS 로 러너가 에피소드 동안 OR 누적한다.
+        return {
+            "success": tgt_grasped & tgt_lifted, "is_grasped": tgt_grasped,
+            "grasped_any": grasped.any(dim=0), "grasped_target": tgt_grasped,
+        }
 
     # The parent's dense reward references a goal_site this task doesn't have.
     # Reward is unused for dataset generation, so neutralize it.
@@ -160,7 +191,7 @@ class ThreeColoredCubesEnv(PickCubeEnv):
 
 
 @register_env("ColoredCubeInBowl-v1", max_episode_steps=100)
-class ColoredCubeInBowlEnv(PickCubeEnv):
+class ColoredCubeInBowlEnv(_ColoredCubeDiagnosis, PickCubeEnv):
     """Pick the seed-chosen colored cube and drop it into a bowl.
 
     Same language-conditioned setup as ThreeColoredCubes (three red/green/blue
@@ -304,13 +335,18 @@ class ColoredCubeInBowlEnv(PickCubeEnv):
         z_low = (offset[:, 2] >= 0.0) & (offset[:, 2] <= 0.06)
         in_bowl = xy_in & z_low
 
-        grasped = torch.stack(
-            [self.agent.is_grasping(c) for c in self.cubes], dim=0)[idx, ar]   # (b,)
+        grasped_all = torch.stack(
+            [self.agent.is_grasping(c) for c in self.cubes], dim=0)             # (n_cubes,b)
+        grasped = grasped_all[idx, ar]                                          # (b,)
         cube_static = torch.stack(
             [c.is_static(lin_thresh=1e-2, ang_thresh=0.5) for c in self.cubes],
             dim=0)[idx, ar]
         success = in_bowl & (~grasped) & cube_static
-        return {"success": success, "in_bowl": in_bowl, "is_grasped": grasped}
+        # 진단 불리언(순간값): DIAGNOSTIC_KEYS 로 러너가 에피소드 동안 OR 누적한다.
+        return {
+            "success": success, "in_bowl": in_bowl, "is_grasped": grasped,
+            "grasped_any": grasped_all.any(dim=0), "grasped_target": grasped,
+        }
 
     def compute_dense_reward(self, obs, action, info):
         return torch.zeros(self.num_envs, device=self.device)

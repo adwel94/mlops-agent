@@ -142,25 +142,6 @@ def _build_obs(obs, cams, instr):
     }
 
 
-def _cube_states(base, lift_thresh):
-    """Per-cube (grasped, z, grasped_and_lifted) read straight from env internals.
-
-    Diagnostic-only and best-effort: returns [] when the env doesn't expose a
-    `cubes` list (e.g. builtin tasks) so the rollout stays task-agnostic. For the
-    colored-cube tasks the cube order matches label_metadata's color list, so the
-    caller maps index -> color without importing the env.
-    """
-    cubes = getattr(base, "cubes", None)
-    if not cubes:
-        return []
-    out = []
-    for c in cubes:
-        g = bool(np.asarray(np1(base.agent.is_grasping(c))).reshape(-1)[0])
-        z = float(np1(c.pose.p)[2])
-        out.append((g, z, g and z > lift_thresh))
-    return out
-
-
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--task", required=True)
@@ -181,7 +162,6 @@ def main():
     env_info = sidecar.get("env_info", {})
     env_id = env_info.get("env_id", args.task)
     label_md = sidecar.get("label_metadata") or {}
-    colors = label_md.get("target_id")                 # ["red","green","blue"] or None
     # robot_uids = the agent the dataset was generated/trained with (e.g. panda_wristcam
     # for a wrist-cam dataset). Recorded in the sidecar; defaults to panda for old 1-cam
     # datasets so the eval env's camera set matches what the model was trained on.
@@ -196,9 +176,6 @@ def main():
     # 언어 명령 틀 = 환경이 선언한 단일 출처(학습 h5_to_lerobot 과 동일 값을 읽음 → 문구 안 어긋남).
     # env 인스턴스에서 바로 읽으므로 옛 데이터셋 sidecar 에 필드가 없어도 동작(마이그레이션 불필요).
     template = base.instruction_template() if hasattr(base, "instruction_template") else None
-    # success = grasped AND lifted clear of table; mirror the env's own threshold
-    # (cube_half_size + 0.04) so the any-cube probe matches evaluate()'s logic.
-    lift_thresh = float(getattr(base, "cube_half_size", 0.02)) + 0.04
     obs0, _ = env.reset(seed=0)
     # select the policy's cameras by NAME (the embodiment contract), not by position.
     # discover all rgb cameras the env declares (base_camera first) — must match what
@@ -217,7 +194,6 @@ def main():
                       key=lambda k: int(k.split("_")[1]))
 
     orig_succ = pol_succ = ik_fail_total = 0
-    n_anypick = n_picked_tgt = 0     # diagnostic: manipulation vs color-grounding
     records = []
     n = len(keys)
     # A1: stream per-episode records to disk as they finish (progress is visible and
@@ -248,9 +224,9 @@ def main():
                 tgt = int(np.asarray(np1(base.target_id)).reshape(-1)[0])
             except Exception:
                 tgt = None
-        ncubes = len(_cube_states(base, lift_thresh))
-        ever_gl = [False] * ncubes              # cube j ever grasped+lifted this episode
-        max_z = [-1e9] * ncubes                 # cube j peak height
+        # 진단 불리언을 env 계약(DIAGNOSTIC_KEYS)대로 에피소드 내내 OR 누적한다 — 러너는
+        # 키 뜻을 모른다(태스크 지식은 env 에). 계약 없는 env(빌트인)면 빈 dict → reason 만 성/실.
+        diag_acc = {k: False for k in getattr(base, "DIAGNOSTIC_KEYS", ())}
         last_q = np1(base.agent.robot.get_qpos())
         success = False
         ep_ik_fails = 0
@@ -277,26 +253,23 @@ def main():
                     np.hstack([arm, float(grip[h, 0])]))
                 last_q = np1(base.agent.robot.get_qpos())
                 success = bool(np.asarray(info["success"]).reshape(-1)[0])
-                for j, (_g, z, gl) in enumerate(_cube_states(base, lift_thresh)):
-                    ever_gl[j] = ever_gl[j] or gl
-                    max_z[j] = max(max_z[j], z)
+                for _k in diag_acc:      # env 진단키를 generic OR 누적("한 번이라도")
+                    if not diag_acc[_k] and _k in info:
+                        diag_acc[_k] = bool(np.asarray(info[_k]).reshape(-1)[0])
                 t += 1
         pol_succ += int(success)
         ik_fail_total += ep_ik_fails
 
-        # diagnostic rollup: did it pick up ANY cube, and was it the RIGHT color?
-        any_pick = bool(any(ever_gl)) if ever_gl else None
-        picked_target = (bool(ever_gl[tgt]) if (ever_gl and tgt is not None
-                                                and tgt < len(ever_gl)) else None)
-        picked_colors = ([colors[j] for j in range(len(ever_gl)) if ever_gl[j]]
-                         if (colors and ever_gl) else [])
-        if any_pick:
-            n_anypick += 1
-        if picked_target:
-            n_picked_tgt += 1
-        # final tcp -> target-cube distance + MISS VECTOR (precision signal), best-effort.
+        # 실패 사유 = env 가 선언한 분류(classify_outcome). 러너는 누적 rollup 만 넘기고
+        # 라벨의 뜻은 모른다(규칙 1) — 새 태스크는 자기 env 에 이 계약만 선언하면 편입된다.
+        # 계약 없는 env(빌트인)면 성/실만.
+        rollup = {"success": bool(success), **diag_acc}
+        reason = (base.classify_outcome(rollup)
+                  if hasattr(base, "classify_outcome")
+                  else ("성공" if success else "실패"))
+        # final tcp -> target 거리 + MISS VECTOR(정밀 신호), best-effort — target_pose 계약 있을 때.
         # 벡터(tcp-target)를 남겨야 "한쪽으로 일정한 편향(프레임 버그)" vs "랜덤 산포(진짜
-        # 부정확)" 를 사후 분석 가능. (스칼라 거리만으론 방향을 못 봄.)
+        # 부정확)" 를 사후 분석 가능(스칼라 거리만으론 방향을 못 봄).
         final_dist = miss_vec = None
         try:
             extra = obs["extra"]
@@ -308,17 +281,12 @@ def main():
         except Exception:
             pass
         records.append({
-            "episode": i, "seed": int(seed),
-            "target_id": tgt,
-            "target_color": (colors[tgt] if (colors and tgt is not None
-                                             and tgt < len(colors)) else None),
+            "episode": i, "seed": int(seed), "target_id": tgt,
             "instruction": instr,
             "budget": int(budget), "steps_used": int(t),
-            "success": bool(success), "ik_fails": int(ep_ik_fails),
-            "any_pick": any_pick, "picked_target": picked_target,
-            "picked_colors": picked_colors,
-            "max_lift": ({colors[j]: round(max_z[j], 4) for j in range(len(ever_gl))}
-                         if (colors and ever_gl) else {}),
+            "success": bool(success), "reason": reason,
+            "ik_fails": int(ep_ik_fails),
+            "diag": diag_acc,   # env 진단 불리언 누적(키 뜻은 env 소관 — 소비자는 안 씀)
             "final_tcp_to_target_m": (round(final_dist, 4)
                                       if final_dist is not None else None),
             "miss_vec": miss_vec,   # [dx,dy,dz] = tcp-target; 편향 vs 산포 사후분석용
@@ -331,16 +299,15 @@ def main():
         # inference latency (distinguishes local vs server stall) and wall time.
         done = len(records)
         infer_ms = int(1000 * ep_infer_s / max(ep_infer_n, 1))
-        print(f"[ep] {done}/{n} idx={i} seed={seed} success={success} "
+        print(f"[ep] {done}/{n} idx={i} seed={seed} success={success} reason={reason} "
               f"steps={t}/{budget} infer_avg_ms={infer_ms} calls={ep_infer_n} "
-              f"wall={time.time() - ep_t0:.1f}s | running pol={pol_succ}/{done} "
-              f"anypick={n_anypick}/{done}", flush=True)
+              f"wall={time.time() - ep_t0:.1f}s | running pol={pol_succ}/{done}", flush=True)
         # B4: Discord progress (parity with training) at ~10 checkpoints + last.
         if _DISCORD and (done % report_every == 0 or done == n):
             send_progress_notification(f"gr00t_eval {env_id}", done, n, start_time,
                                        channel=DiscordChannel.PIPELINE)
         pbar.update(1)
-        pbar.set_postfix(dict(orig=orig_succ, pol=pol_succ, anypick=n_anypick))
+        pbar.set_postfix(dict(orig=orig_succ, pol=pol_succ))
 
     f.close()
     env.close()
@@ -349,16 +316,17 @@ def main():
         lf.close()
         print(f"[gr00t_eval] per-episode diagnostics -> {args.log_jsonl}")
 
-    # color-grounding readout: of episodes where SOME cube was picked, how often
-    # was it the target color? (random color choice over k cubes -> ~1/k)
-    color_rate = n_picked_tgt / max(n_anypick, 1)
+    # 실패 사유 집계 = env 가 선언한 라벨을 그대로 센다(소비자는 뜻 모름). 파싱 안전을 위해
+    # reasons 토큰은 공백 없이(gr00t_eval.py 가 `\w+=\S+` 로 DONE 라인을 파싱).
+    from collections import Counter
+    reasons = Counter(r["reason"] for r in records)
+    reason_str = ",".join(f"{lab}:{c}" for lab, c in reasons.most_common())
     print(f"DONE gr00t_eval episodes={n} orig_success={orig_succ}/{n} "
           f"policy_success={pol_succ}/{n} success_rate={pol_succ / max(n, 1):.3f} "
-          f"ik_fails={ik_fail_total} any_pick={n_anypick}/{n} "
-          f"picked_target={n_picked_tgt}/{n} correct_color_rate={color_rate:.3f}")
+          f"ik_fails={ik_fail_total} reasons={reason_str}")
     if _DISCORD:
         send_discord(f"✅ gr00t_eval 완료 — {env_id}: success {pol_succ}/{n} "
-                     f"= {pol_succ / max(n, 1):.1%}, any_pick {n_anypick}/{n}, "
+                     f"= {pol_succ / max(n, 1):.1%} | {reason_str.replace(',', ', ')} | "
                      f"{time.time() - start_time:.0f}s",
                      channel=DiscordChannel.PIPELINE)
 
