@@ -14,10 +14,10 @@
 """
 from __future__ import annotations
 
+import shlex
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -26,14 +26,18 @@ except Exception:
 
 
 def run(after: int, do: str | None = None, todo: str | None = None) -> int:
-    """after 초 자고 do 를 실행(bash -c), 끝에 todo 를 배너로 출력. do 의 종료코드 반환."""
+    """after 초 자고 do 를 실행, 끝에 todo 를 배너로 출력. do 의 종료코드 반환.
+
+    do 는 shlex 로 argv 분해해 프로그램을 직접 exec 한다(nested 셸 없음) — Windows 도
+    forward-slash exe 경로를 CreateProcess 로 받으므로 Git Bash/WSL bash 모호성을 피한다.
+    파이프·리다이렉트 같은 셸 기능은 안 쓴다(단일 명령 실행 전용).
+    """
     if after > 0:
         time.sleep(after)
     rc = 0
     if do:
         print(f"[poll] 깨어남 → 실행: {do}\n" + "-" * 60)
-        # bash -c 로 실행 — 플랫폼 무관하게 에이전트가 수동으로 돌리는 것과 같은 셸 의미.
-        proc = subprocess.run(["bash", "-c", do], text=True)
+        proc = subprocess.run(shlex.split(do), text=True)
         rc = proc.returncode
         print("-" * 60 + f"\n[poll] --do 종료코드 {rc}")
     if todo:
@@ -49,7 +53,7 @@ def _cli() -> None:
     import argparse
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--after", type=int, required=True, help="깨어나기까지 잘 초")
-    p.add_argument("--do", default=None, help="깨어나서 실행할 명령 (bash -c 로 실행)")
+    p.add_argument("--do", default=None, help="깨어나서 실행할 명령 (shlex argv 로 직접 exec)")
     p.add_argument("--todo", default=None, help="깨어날 때 되띄울 자연어 할 일 노트")
     args = p.parse_args()
     rc = run(after=args.after, do=args.do, todo=args.todo)
