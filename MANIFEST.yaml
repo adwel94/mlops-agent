@@ -88,3 +88,33 @@ cubeinbowl:
       date: '2026-07-07'
       image: adwel94/maniskill-gr00t-train:latest
       eval_method: v2
+    v2-s15000:
+      dataset: v2
+      steps: 15000
+      full: false
+      repo: adwel94/gr00t-cubeinbowl
+      tag: v2-s15000
+      eval: 0.633
+      date: '2026-07-07'
+      image: adwel94/maniskill-gr00t-train:latest
+      eval_method: v2
+    v2-s20000:
+      dataset: v2
+      steps: 20000
+      full: false
+      repo: adwel94/gr00t-cubeinbowl
+      tag: v2-s20000
+      eval: 0.653
+      date: '2026-07-08'
+      image: adwel94/maniskill-gr00t-train:latest
+      eval_method: v2
+    v2-s37500:
+      dataset: v2
+      steps: 37500
+      full: false
+      repo: adwel94/gr00t-cubeinbowl
+      tag: v2-s37500
+      eval: 0.878
+      date: '2026-07-08'
+      image: adwel94/maniskill-gr00t-train:latest
+      eval_method: v2
