@@ -41,7 +41,18 @@ MANIFEST 좌표 (threecubes/v2-s20000)
      --model <task>/<model> --server-host <IP> --server-port <PORT>
    ```
    (배선만 볼 때는 `--mock` 으로 서버 없이 실행 가능하다고 안내.)
-4. 플레이 종료 후: 파드가 떠 있으면 과금 중이므로 `/runpod_down` 을 안내한다.
+4. **입력할 예시 명령을 함께 건넨다** — 스크립트도 REPL 시작 시 출력하지만, 사용자는
+   실행 *전에* 무엇을 시킬지 알아야 한다. 학습된 문장이 곧 유효 입력이므로 그대로 보여준다
+   (태스크 이름을 모른 채 데이터에서 읽는다 — 새 태스크에도 코드 불변):
+   ```
+   python -c "import sys; sys.path.insert(0,'.'); \
+     from scripts.gr00t_play import resolve_model, fetch_dataset_meta as m; \
+     s=resolve_model('<task>/<model>'); \
+     print(*m(s['dataset_repo'], s['dataset_tag'])['instructions'], sep='\n')"
+   ```
+   문장은 환경의 `instruction_template()` 이 단일 출처다(학습·평가·플레이가 같은 문구).
+   틀 밖의 명령도 REPL 이 받지만 학습 분포 밖이라 거동이 무너지는 게 정상이라고 알린다.
+5. 플레이 종료 후: 파드가 떠 있으면 과금 중이므로 `/runpod_down` 을 안내한다.
 
 ## REPL 명령 (스크립트가 시작 시 예시 명령과 함께 출력)
 
