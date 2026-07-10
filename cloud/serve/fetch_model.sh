@@ -22,6 +22,27 @@ export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 # 가벼운 의존성 — 런타임 설치(이미지엔 안 구움). hf CLI 는 HF_TOKEN env 를 자동 인식.
 pip install -q -U "huggingface_hub[cli]"
 
+# huggingface.co 앞단의 CloudFront 엣지가 출발지 IP 기준으로 429 를 던진다 — 파드는
+# egress IP 를 다른 테넌트와 공유하므로 우리 요청량과 무관하게 맞을 수 있다. 엣지 스로틀은
+# 보통 수십 초면 풀리니 지수 백오프로 다시 친다. (재시도 소진 시 non-zero 를 반환하지만
+# 이 스크립트는 set -e 가 아니므로 호출부 흐름은 그대로 — serve 가 실패하며 파드는 idle 로
+# 남아 수동 복구가 가능하다.)
+HF_DL_RETRIES="${HF_DL_RETRIES:-5}"
+hf_download_retry() {
+    local attempt=1 delay=5
+    while :; do
+        hf download "$@" && return 0
+        if [ "${attempt}" -ge "${HF_DL_RETRIES}" ]; then
+            echo "==> HF download ${HF_DL_RETRIES}회 모두 실패 — 포기"
+            return 1
+        fi
+        echo "==> HF download 실패 (attempt ${attempt}/${HF_DL_RETRIES}) — ${delay}s 후 재시도"
+        sleep "${delay}"
+        attempt=$((attempt + 1))
+        delay=$((delay * 2))
+    done
+}
+
 # 체크포인트(재시도 전용)는 받지 않는다 — 서빙엔 최종 모델만 필요.
 #   추가로, run-root 샤드와 checkpoint-* 샤드가 동일 blob 이면 hf download 가
 #   --local-dir 로 한쪽만 materialize 해 root 가중치가 누락되는 충돌이 있다 →
@@ -29,7 +50,7 @@ pip install -q -U "huggingface_hub[cli]"
 CKPT_EXCLUDE='*checkpoint-*/*'
 if [ -n "${HF_MODEL_SUBDIR:-}" ]; then
     echo "==> HF model download: ${HF_MODEL}#${HF_MODEL_SUBDIR}@${HF_MODEL_REVISION:-main} -> ${DEST} (체크포인트 제외)"
-    hf download "${HF_MODEL}" \
+    hf_download_retry "${HF_MODEL}" \
         --revision "${HF_MODEL_REVISION:-main}" \
         --include "${HF_MODEL_SUBDIR}/*" \
         --exclude "${CKPT_EXCLUDE}" \
@@ -37,7 +58,7 @@ if [ -n "${HF_MODEL_SUBDIR:-}" ]; then
     RESOLVED="${DEST}/${HF_MODEL_SUBDIR}"
 else
     echo "==> HF model download: ${HF_MODEL}@${HF_MODEL_REVISION:-main} -> ${DEST} (체크포인트 제외)"
-    hf download "${HF_MODEL}" \
+    hf_download_retry "${HF_MODEL}" \
         --revision "${HF_MODEL_REVISION:-main}" \
         --exclude "${CKPT_EXCLUDE}" \
         --local-dir "${DEST}"
